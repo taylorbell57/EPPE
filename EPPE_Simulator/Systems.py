@@ -1,5 +1,5 @@
 # Author: Taylor James Bell
-# Last Update: 2019-01-14
+# Last Update: 2019-01-16
 
 import numpy as np
 import astropy.constants as const
@@ -28,12 +28,16 @@ class Systems(object):
         radii = np.array(data['pl_radj'])*const.R_jup.value
         masses = np.array(data['pl_bmassj'])*const.M_jup.value/const.M_earth.value
         a = np.array(data['pl_orbsmax'])*const.au.value
-        per = np.array(data['pl_orbper'])*3600*24
+        per = np.array(data['pl_orbper'])
+        inc = np.array(data['pl_orbincl'])
+        e = np.array(data['pl_orbeccen'])
         gaia_dist = np.array(data['gaia_dist'])*const.pc.value
         dist = np.array(data['st_dist'])*const.pc.value
         teff = np.array(data['st_teff'])
         rstar = np.array(data['st_rad'])*const.R_sun.value
 
+        e[np.isnan(e)] = 0
+        inc[np.isnan(inc)] = np.arccos(np.random.uniform(0,1,len(inc[np.isnan(inc)])))*180/np.pi
         dist[np.isfinite(gaia_dist)] = gaia_dist[np.isfinite(gaia_dist)]
         
         if complete:
@@ -66,7 +70,9 @@ class Systems(object):
         albedo = np.ones_like(radii)
         polEff = np.ones_like(radii)
         
-        catalogue = {'rp': radii, 'a': a, 'per': per, 'dist': dist, 'teff': teff, 'rstar': rstar, 'albedo': albedo, 'polEff': polEff}
+        catalogue = {'rp': radii, 'a': a, 'per': per, 'inc': inc, 'e': e,
+                     'dist': dist, 'teff': teff, 'rstar': rstar,
+                     'albedo': albedo, 'polEff': polEff}
         
         return catalogue
     
@@ -75,13 +81,17 @@ class Systems(object):
         radii = const.R_jup.value*np.ones(nPlanets)
         a = 0.02*const.au.value*np.ones(nPlanets)
         per = 3*np.ones(nPlanets)
+        inc = 90*np.ones(nPlanets)
+        e = 0.*np.ones(nPlanets)
         dist = 10*np.ones(nPlanets)
         teff = 5000*np.ones(nPlanets)
         
         albedo = np.ones_like(radii)
         polEff = np.ones_like(radii)
         
-        catalogue = {'rp': radii, 'a': a, 'per': per, 'dist': dist, 'teff': teff, 'albedo': albedo, 'polEff': polEff}
+        catalogue = {'rp': radii, 'a': a, 'per': per, 'inc': inc, 'e': e,
+                     'dist': dist, 'teff': teff, 'rstar': rstar,
+                     'albedo': albedo, 'polEff': polEff}
         
         return catalogue
     

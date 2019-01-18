@@ -1,5 +1,5 @@
 # Author: Taylor James Bell
-# Last Update: 2019-01-14
+# Last Update: 2019-01-16
 
 import numpy as np
 import astropy.constants as const
@@ -25,9 +25,9 @@ class EPPE(object):
         
         return
     
-    def observe(self, systems, expTime=3600):
+    def observe(self, systems, expTime=1):
         
-        teleFactor = self.trans*expTime*(np.pi*self.rad**2)
+        teleFactor = self.trans*(expTime/24)*(np.pi*self.rad**2)
         
         fstarObs = teleFactor*systems.Fobs(systems.Fstar(self.filterObj))
         fplanetObs = teleFactor*systems.Fobs(systems.Fp(self.filterObj))
