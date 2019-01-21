@@ -1,44 +1,44 @@
 # Author: Taylor James Bell
-# Last Update: 2019-01-16
+# Last Update: 2019-01-21
 
 import numpy as np
 import astropy.constants as const
 import pandas as pd
 
 class Systems(object):
-    def __init__(self, load=True, fname='planets.csv', complete=True, comment='#', nPlanets=3000):
+    def __init__(self, load=True, fname='compositepars_with_inclinations.csv', complete=True, comment='#', nPlanets=300):
         if load:
             self.catalogue = self.load_planet_catalogue(fname=fname, complete=complete, comment=comment)
+            # self.catalogue = self.load_crossmatch_planet_catalogue(complete=complete, comment=comment)
         else:
             self.catalogue = self.generate_planet_catalogue(nPlanets)
         return
     
-    def load_planet_catalogue(self, fname='planets.csv', complete=True, comment='#'):
+    def load_planet_catalogue(self, fname='compositepars_with_inclinations.csv', complete=True, comment='#'):
         data = pd.read_csv(fname, comment=comment)
-        good = np.where(np.logical_and(np.logical_and(np.logical_and(np.logical_and(np.logical_and(
-                            np.logical_or(np.isfinite(data['pl_radj']),np.isfinite(data['pl_bmassj'])),
-                            np.logical_or(np.isfinite(data['st_dist']), np.isfinite(data['gaia_dist']))),
-                            np.isfinite(data['pl_orbper'])),
-                            np.isfinite(data['st_teff'])),
-                            np.isfinite(data['st_rad'])),
-                            np.isfinite(data['pl_orbsmax'])))[0]
+        good = np.where(np.logical_and(np.logical_and(np.logical_and(np.logical_and(np.logical_and(np.logical_and(
+                            np.logical_or(np.isfinite(data['fpl_radj']),np.isfinite(data['fpl_bmassj'])),
+                            np.isfinite(data['fst_dist'])),
+                            np.isfinite(data['fpl_orbper'])),
+                            np.isfinite(data['fst_teff'])),
+                            (data['fpl_orbper'] < 100.)),
+                            np.isfinite(data['fst_rad'])),
+                            np.isfinite(data['fpl_smax'])))[0]
         
         data = data.iloc[good]
         
-        radii = np.array(data['pl_radj'])*const.R_jup.value
-        masses = np.array(data['pl_bmassj'])*const.M_jup.value/const.M_earth.value
-        a = np.array(data['pl_orbsmax'])*const.au.value
-        per = np.array(data['pl_orbper'])
-        inc = np.array(data['pl_orbincl'])
-        e = np.array(data['pl_orbeccen'])
-        gaia_dist = np.array(data['gaia_dist'])*const.pc.value
-        dist = np.array(data['st_dist'])*const.pc.value
-        teff = np.array(data['st_teff'])
-        rstar = np.array(data['st_rad'])*const.R_sun.value
+        radii = np.array(data['fpl_radj'])*const.R_jup.value
+        masses = np.array(data['fpl_bmassj'])*const.M_jup.value/const.M_earth.value
+        a = np.array(data['fpl_smax'])*const.au.value
+        per = np.array(data['fpl_orbper'])
+        inc = np.array(data['fpl_orbincl'])
+        e = np.array(data['fpl_eccen'])
+        dist = np.array(data['fst_dist'])*const.pc.value
+        teff = np.array(data['fst_teff'])
+        rstar = np.array(data['fst_rad'])*const.R_sun.value
 
         e[np.isnan(e)] = 0
         inc[np.isnan(inc)] = np.arccos(np.random.uniform(0,1,len(inc[np.isnan(inc)])))*180/np.pi
-        dist[np.isfinite(gaia_dist)] = gaia_dist[np.isfinite(gaia_dist)]
         
         if complete:
             slope1 = 0.2790
@@ -76,18 +76,19 @@ class Systems(object):
         
         return catalogue
     
-    def generate_planet_catalogue(self, nPlanets=3000):
+    def generate_planet_catalogue(self, nPlanets=300):
         
-        radii = const.R_jup.value*np.ones(nPlanets)
-        a = 0.02*const.au.value*np.ones(nPlanets)
-        per = 3*np.ones(nPlanets)
-        inc = 90*np.ones(nPlanets)
+        radii = 1.*const.R_jup.value*np.ones(nPlanets)
+        a = 0.05*const.au.value*np.ones(nPlanets)
+        per = 3.*np.ones(nPlanets)
+        inc = 90.*np.ones(nPlanets)
         e = 0.*np.ones(nPlanets)
-        dist = 10*np.ones(nPlanets)
-        teff = 5000*np.ones(nPlanets)
+        dist = 10.*np.ones(nPlanets)*const.pc.value
+        teff = 5000.*np.ones(nPlanets)
+        rstar = 1.*const.R_sun.value*np.ones(nPlanets)
         
-        albedo = np.ones_like(radii)
-        polEff = np.ones_like(radii)
+        albedo = 1.*np.ones_like(radii)
+        polEff = 1.*np.ones_like(radii)
         
         catalogue = {'rp': radii, 'a': a, 'per': per, 'inc': inc, 'e': e,
                      'dist': dist, 'teff': teff, 'rstar': rstar,

@@ -1,5 +1,5 @@
 # Author: Taylor James Bell
-# Last Update: 2019-01-16
+# Last Update: 2019-01-21
 
 import numpy as np
 from .KeplerOrbit import KeplerOrbit
@@ -65,26 +65,27 @@ def compute_scatPlane_angle(times, orb, dist):
     r = np.array(orb.xyz(times))
     d = np.array([dist, 0, 0])[:,np.newaxis]
     Z = np.array([0, 0, 1])[:,np.newaxis]
+    Y = np.array([0, 1, 0])[:,np.newaxis]
     norm = np.cross(r, d, axis=0)
     
-    return 180/np.pi*np.arccos(np.sum(Z*norm, axis=0)
+    return np.sign(np.sum(Y*norm, axis=0))*180/np.pi*np.arccos(np.sum(Z*norm, axis=0)
                                /(np.sqrt(np.sum(Z**2, axis=0))*np.sqrt(np.sum(norm**2, axis=0))))
 
 def t_to_phase(times, Porb, t0=0):
-    return (times-t0)/Porb
+    return (times-t0)/Porb % 1.
 
 def polarization(times, stokes, dist, Porb, a, inc=90, e=0, argp=90, Omega=270, t0=0):
     orb = KeplerOrbit(Porb=Porb, a=a, inc=inc, e=e, argp=argp, Omega=Omega, t0=t0)
+    
+    Ii = np.array([1, 0, 0, 0]).reshape(-1,1)
     
     r = np.array(orb.xyz(times))
     angs = xyz_to_scatAngle(r, dist)
     
     lambertCurve = lambert_scatter(angs+180, stokes)[0]
-    rayStokesCurve = np.array([rayleigh_scatter(ang, stokes) for ang in angs])*lambertCurve[np.newaxis,:]
+    rayStokesCurve = np.array([rayleigh_scatter(ang, Ii) for ang in angs])[:,:,0].T*lambertCurve[np.newaxis,:]
     
     scatPlane_angle = compute_scatPlane_angle(times, orb, dist)
-    rayStokesCurve = rotate(scatPlane_angle, polStokesCurve)
+    rayStokesCurve = rotate(scatPlane_angle, rayStokesCurve)
     
-    rayPolCurve = np.sqrt(rayStokesCurve[:,1,0]**2+rayStokesCurve[:,2,0]**2)/rayStokesCurve[:,0,0]
-    
-    return rayPolCurve, rayStokesCurve
+    return rayStokesCurve
