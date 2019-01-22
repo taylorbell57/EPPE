@@ -1,5 +1,5 @@
 # Author: Taylor James Bell
-# Last Update: 2019-01-21
+# Last Update: 2019-01-22
 
 import numpy as np
 import astropy.constants as const
@@ -27,29 +27,70 @@ class EPPE(object):
         
         return
     
-    def observe_photometric(self, systems, expTime=1):
+    def expose_photometric(self, systems, expTime=1.):
         
-        teleFactor = self.trans*(expTime/24)*(np.pi*self.rad**2)
+        teleFactor = self.trans*(expTime*3600)*(np.pi*self.rad**2)
         
-        fstarObs = teleFactor*systems.Fobs(systems.Fstar(self.filterObj))
-        fplanetObs = teleFactor*systems.Fobs(systems.Fp(self.filterObj))
-        fPhotNoise = np.sqrt(fstarObs+fplanetObs)
+        fstars = teleFactor*systems.Fobs(systems.Fstar(self.filterObj))
+        fplanets = teleFactor*systems.Fobs(systems.Fp(self.filterObj))
+        fPhotNoise = np.sqrt(fstars+fplanets)
         
-        return fplanetObs, fstarObs, fPhotNoise
+        return np.rint(fplanets), np.rint(fstars), np.rint(fPhotNoise)
+    
+    def observe_photometric(self, systems, expTime=1., intTime=24., photonNoise=True):
+        
+        fplanets, fstars, _ = self.expose_photometric(systems, expTime)
+        
+        fplanetsObs = []
+        fstarsObs = []
+        timesList = []
+        phasesList = []
+        
+        for i in range(len(fplanets)):
+            # t0 = systems.catalogue['t0'][i]
+            t0 = 0 # FIX
+            dist = systems.catalogue['dist'][i]
+            Porb = systems.catalogue['per'][i]
+            a = systems.catalogue['a'][i]
+            inc = systems.catalogue['inc'][i]
+            e = systems.catalogue['e'][i]
+            # argp = systems.catalogue['argp'][i]
+            argp = 90 # FIX
+            # Omega = systems.catalogue['Omega'][i]
+            Omega = 270 # FIX
+            
+            nPoints = int(np.rint(intTime/expTime))
+            
+            times = np.random.uniform(0,1,1)*Porb+np.linspace(0, intTime/24., nPoints)
+            phases = t_to_phase(times, Porb)
+            timesList.append(times)
+            phasesList.append(phases)
+            
+            orb = KeplerOrbit(Porb=Porb, a=a, inc=inc, e=e, argp=argp, Omega=Omega, t0=t0)
+            r = np.array(orb.xyz(times))
+            angs = xyz_to_scatAngle(r, dist)
+            lambertCurve = lambert_scatter(angs+180, fplanets[i])
+            
+            if photonNoise:
+                pNoise = np.sqrt(lambertCurve)*np.random.normal(loc=0, scale=1, size=nPoints) 
+                sNoise = np.random.normal(loc=0, scale=np.sqrt(fstars[i]), size=nPoints)
+            else:
+                pNoise = sNoise = np.ones(nPoints)
+            
+            fplanetsObs.append(lambertCurve+pNoise)
+            fstarsObs.append(fstars[i]+sNoise)
+            
+        return fplanetsObs, fstarsObs, timesList, phasesList
 
-    def observe_polarization(self, systems, expTime=1):
+    def observe_polarization(self, systems, expTime=1., intTime=24., photonNoise=True):
         
-        teleFactor = self.trans*(expTime/24)*(np.pi*self.rad**2)
+        fplanetObs, fstarObs, _ = self.expose_photometric(systems, expTime)
         
-        fstarObs = teleFactor*systems.Fobs(systems.Fstar(self.filterObj))
-        fplanetObs = teleFactor*systems.Fobs(systems.Fp(self.filterObj))
-        fPhotNoise = np.sqrt(fstarObs+fplanetObs)
+        nPoints = int(np.rint(intTime/expTime))
         
         stokesCurves = []
         
         for i in range(len(fplanetObs)):
-            
-            stokes = np.array([fplanetObs[i], 0, 0, 0]).reshape(4,1)
             
             # t0 = systems.catalogue['t0'][i]
             t0 = 0 # FIX
@@ -63,13 +104,30 @@ class EPPE(object):
             # Omega = systems.catalogue['Omega'][i]
             Omega = 270 # FIX
             
-            # FIX: randomly generate start time, and use determined integration duration
-            times = np.random.uniform(0,1,1)*Porb+np.linspace(0, Porb, np.rint(Porb*24./expTime))
-            
+            times = np.random.uniform(0,1,1)*Porb+np.linspace(0, intTime/24., nPoints)
             phases = t_to_phase(times, Porb)
+            
+            if photonNoise:
+                nPhotons = fplanetObs[i] + np.sqrt(fplanetObs[i])*np.random.normal(0, 1, nPoints)
+                nPhotons_stokes = np.random.normal(loc=0, scale=0.5/np.sqrt(fplanetObs[i]/3.), 
+                                                   size=3*nPoints).reshape(3,nPoints)
+                stokes = np.append(nPhotons[np.newaxis,:], nPhotons_stokes, axis=0)
+            else:
+                stokes = np.array([fplanetObs[i], 0, 0, 0]).reshape(4,1)
+            
             stokesCurve = polarization(times, stokes, dist, Porb, a, inc=inc, e=e, argp=argp, Omega=Omega, t0=0)
             
-            stokesCurve[0,:] += fstarObs[i]
+            if photonNoise:
+                nPhotonsStar = fstarObs[i] + np.sqrt(fstarObs[i])*np.random.normal(0, 1, nPoints)
+                nPhotonsStar_stokes = np.random.normal(loc=0, scale=0.5/np.sqrt(fstarObs[i]/3.),
+                                                       size=3*nPoints).reshape(3,-1)
+                stokesStar = np.append(nPhotonsStar[np.newaxis, :], nPhotonsStar_stokes, axis=0)
+
+                stokesCurve += stokesStar
+            else:
+                stokesCurve[0,:] += fstarObs[i]
+
+            stokesCurve = np.rint(stokesCurve)
             
             stokesCurve = np.append(stokesCurve, times[np.newaxis,:], axis=0)
             stokesCurve = np.append(stokesCurve, phases[np.newaxis,:], axis=0)
@@ -106,4 +164,5 @@ class EPPE(object):
             # plt.gca().set_xticks(np.linspace(0,1,11,endpoint=True), minor=True)
             # plt.show()
             
-        return stokesCurves#np.array(stokesCurves)
+        return stokesCurves
+    

@@ -1,5 +1,5 @@
 # Author: Taylor James Bell
-# Last Update: 2019-01-21
+# Last Update: 2019-01-22
 
 import numpy as np
 from .KeplerOrbit import KeplerOrbit
