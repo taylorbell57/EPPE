@@ -1,5 +1,5 @@
 # Author: Taylor James Bell
-# Last Update: 2019-01-21
+# Last Update: 2019-01-23
 
 import numpy as np
 import astropy.constants as const
@@ -27,6 +27,7 @@ class Systems(object):
         
         data = data.iloc[good]
         
+        name = np.array(data['fpl_hostname'])+' '+np.array(data['fpl_letter'])
         radii = np.array(data['fpl_radj'])*const.R_jup.value
         masses = np.array(data['fpl_bmassj'])*const.M_jup.value/const.M_earth.value
         a = np.array(data['fpl_smax'])*const.au.value
@@ -70,7 +71,7 @@ class Systems(object):
         albedo = np.ones_like(radii)
         polEff = np.ones_like(radii)
         
-        catalogue = {'rp': radii, 'a': a, 'per': per, 'inc': inc, 'e': e,
+        catalogue = {'name': name, 'rp': radii, 'a': a, 'per': per, 'inc': inc, 'e': e,
                      'dist': dist, 'teff': teff, 'rstar': rstar,
                      'albedo': albedo, 'polEff': polEff}
         

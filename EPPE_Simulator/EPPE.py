@@ -1,5 +1,5 @@
 # Author: Taylor James Bell
-# Last Update: 2019-01-22
+# Last Update: 2019-01-23
 
 import numpy as np
 import astropy.constants as const
@@ -120,7 +120,7 @@ class EPPE(object):
             if photonNoise:
                 nPhotonsStar = fstarObs[i] + np.sqrt(fstarObs[i])*np.random.normal(0, 1, nPoints)
                 nPhotonsStar_stokes = np.random.normal(loc=0, scale=0.5/np.sqrt(fstarObs[i]/3.),
-                                                       size=3*nPoints).reshape(3,-1)
+                                                       size=3*nPoints).reshape(3,nPoints)
                 stokesStar = np.append(nPhotonsStar[np.newaxis, :], nPhotonsStar_stokes, axis=0)
 
                 stokesCurve += stokesStar
