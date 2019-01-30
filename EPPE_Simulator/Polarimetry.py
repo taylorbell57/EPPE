@@ -1,5 +1,5 @@
 # Author: Taylor James Bell
-# Last Update: 2019-01-22
+# Last Update: 2019-01-28
 
 import numpy as np
 from .KeplerOrbit import KeplerOrbit
@@ -74,7 +74,7 @@ def compute_scatPlane_angle(times, orb, dist):
 def t_to_phase(times, Porb, t0=0):
     return (times-t0)/Porb % 1.
 
-def polarization(times, stokes, dist, Porb, a, inc=90, e=0, argp=90, Omega=270, t0=0):
+def polarization_keplerAngles(times, stokes, polEff, dist, Porb, a, inc=90, e=0, argp=90, Omega=270, t0=0):
     orb = KeplerOrbit(Porb=Porb, a=a, inc=inc, e=e, argp=argp, Omega=Omega, t0=t0)
     
     Ii = np.array([1, 0, 0, 0]).reshape(-1,1)
@@ -84,8 +84,27 @@ def polarization(times, stokes, dist, Porb, a, inc=90, e=0, argp=90, Omega=270, 
     
     lambertCurve = lambert_scatter(angs+180, stokes)[0]
     rayStokesCurve = np.array([rayleigh_scatter(ang, Ii) for ang in angs])[:,:,0].T*lambertCurve[np.newaxis,:]
+    rayStokesCurve[1:] *= polEff
     
     scatPlane_angle = compute_scatPlane_angle(times, orb, dist)
     rayStokesCurve = rotate(scatPlane_angle, rayStokesCurve)
+    
+    return rayStokesCurve
+
+def polarization_apparentAngles(times, stokes, polEff, dist, Porb, a, inc=90, e=0, argp=90, orbAxisAng=0, t0=0):
+    orb = KeplerOrbit(Porb=Porb, a=a, inc=inc, e=e, argp=argp, Omega=270, t0=t0)
+    
+    Ii = np.array([1, 0, 0, 0]).reshape(-1,1)
+    
+    r = np.array(orb.xyz(times))
+    angs = xyz_to_scatAngle(r, dist)
+    
+    lambertCurve = lambert_scatter(angs+180, stokes)[0]
+    rayStokesCurve = np.array([rayleigh_scatter(ang, Ii) for ang in angs])[:,:,0].T*lambertCurve[np.newaxis,:]
+    rayStokesCurve[1:] *= polEff
+    
+    scatPlane_angle = compute_scatPlane_angle(times, orb, dist)
+    rayStokesCurve = rotate(scatPlane_angle, rayStokesCurve)
+    rayStokesCurve = rotate(orbAxisAng, rayStokesCurve)
     
     return rayStokesCurve

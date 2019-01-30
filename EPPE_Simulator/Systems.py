@@ -1,5 +1,5 @@
 # Author: Taylor James Bell
-# Last Update: 2019-01-23
+# Last Update: 2019-01-28
 
 import numpy as np
 import astropy.constants as const
@@ -33,13 +33,21 @@ class Systems(object):
         a = np.array(data['fpl_smax'])*const.au.value
         per = np.array(data['fpl_orbper'])
         inc = np.array(data['fpl_orbincl'])
+        orbAxisAng = np.random.uniform(0,360,len(name))
         e = np.array(data['fpl_eccen'])
+        argp = np.random.uniform(0,360,len(name))
         dist = np.array(data['fst_dist'])*const.pc.value
         teff = np.array(data['fst_teff'])
         rstar = np.array(data['fst_rad'])*const.R_sun.value
-
+        
         e[np.isnan(e)] = 0
         inc[np.isnan(inc)] = np.arccos(np.random.uniform(0,1,len(inc[np.isnan(inc)])))*180/np.pi
+        
+        Omega = 270.*np.ones(len(a))
+        
+        if False:
+            i = 1
+            Omega = 1
         
         if complete:
             slope1 = 0.2790
@@ -68,10 +76,11 @@ class Systems(object):
                 else:
                     radii[i] = const4*masses[i]**(slope4)
         
-        albedo = np.ones_like(radii)
-        polEff = np.ones_like(radii)
+        albedo = 1.*np.ones_like(radii)
+        polEff = 1.*np.ones_like(radii)
         
-        catalogue = {'name': name, 'rp': radii, 'a': a, 'per': per, 'inc': inc, 'e': e,
+        catalogue = {'name': name, 'rp': radii, 'a': a, 'per': per,
+                     'inc': inc, 'orbAxisAng': orbAxisAng, 'e': e,
                      'dist': dist, 'teff': teff, 'rstar': rstar,
                      'albedo': albedo, 'polEff': polEff}
         
@@ -88,10 +97,15 @@ class Systems(object):
         teff = 5000.*np.ones(nPlanets)
         rstar = 1.*const.R_sun.value*np.ones(nPlanets)
         
+        orbAxisAng = np.random.uniform(0,360,nPlanets)
+        
         albedo = 1.*np.ones_like(radii)
         polEff = 1.*np.ones_like(radii)
         
-        catalogue = {'rp': radii, 'a': a, 'per': per, 'inc': inc, 'e': e,
+        name = np.arange(nPlanets).astype(str)
+        
+        catalogue = {'name': name, 'rp': radii, 'a': a, 'per': per,
+                     'inc': inc, 'orbAxisAng': orbAxisAng, 'e': e,
                      'dist': dist, 'teff': teff, 'rstar': rstar,
                      'albedo': albedo, 'polEff': polEff}
         
@@ -140,7 +154,6 @@ class Systems(object):
         if tBrights is None:
             tBrights = self.catalogue['teff']
         tBrights = tBrights.reshape(-1,1)
-        dwav = filterObj['dwav']
         wavs = filterObj['wavs'].reshape(1,-1)
         tputs = filterObj['tput'].reshape(1,-1)
         
@@ -149,7 +162,7 @@ class Systems(object):
         
         B_wav = a/np.expm1(b/tBrights)
         
-        return tputs * B_wav * np.pi*self.catalogue['rstar'].reshape(-1,1)**2
+        return tputs * B_wav * (np.pi*self.catalogue['rstar']**2).reshape(-1,1)
 
     def Fp_spec(self, filterObj, tBrights=None):
         """Calculate the reflected photon flux from each system.
@@ -168,7 +181,7 @@ class Systems(object):
         rp = self.catalogue['rp'].reshape(-1,1)
         a = self.catalogue['a'].reshape(-1,1)
         
-        # factor of 4 missing from fstar and semi-major axis, so they cancel out
+        # factor of 4 missing from fstar and semi-major axis squared, so they cancel out
         return albedo * fstar * (rp/a)**2
 
     def Fobs(self, fluxes):
@@ -177,7 +190,7 @@ class Systems(object):
     
     def integrate_spec(self, flux, filterObj):
         
-        dwav = filterObj['dwav']
+        dwav = filterObj['dwav'].reshape(1,-1)
         energies = const.h.value*const.c.value/filterObj['wavs'].reshape(1,-1)
         
         return np.sum(flux/energies*dwav, axis=1) 
