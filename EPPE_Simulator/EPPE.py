@@ -37,7 +37,7 @@ class EPPE(object):
         
         return np.rint(fplanets), np.rint(fstars), np.rint(fPhotNoise)
     
-    def observe_photometric(self, systems, expTime=1., intTime=24., photonNoise=True):
+    def observe_photometric(self, systems, expTime=1., intTime=None, photonNoise=True):
         
         fplanets, fstars, _ = self.expose_photometric(systems, expTime)
         
@@ -58,9 +58,14 @@ class EPPE(object):
             argp = 90 # FIX
             orbAxisAng = systems.catalogue['orbAxisAng'][i]
             
-            nPoints = int(np.rint(intTime/expTime))
+            if intTime is None:
+                intTimeTemp = Porb*24.
+            else:
+                intTimeTemp = intTime
             
-            times = np.random.uniform(0,1,1)*Porb+np.linspace(0, intTime/24., nPoints)
+            nPoints = int(np.rint(intTimeTemp/expTime))
+            
+            times = np.random.uniform(0,1,1)*Porb+np.linspace(0, intTimeTemp/24., nPoints)
             phases = t_to_phase(times, Porb)
             timesList.append(times)
             phasesList.append(phases)
@@ -81,11 +86,9 @@ class EPPE(object):
             
         return fplanetsObs, fstarsObs, timesList, phasesList
 
-    def observe_polarization(self, systems, expTime=1., intTime=24., photonNoise=True):
+    def observe_polarization(self, systems, expTime=1., intTime=None, photonNoise=True):
         
         fplanetObs, fstarObs, _ = self.expose_photometric(systems, expTime)
-        
-        nPoints = int(np.rint(intTime/expTime))
         
         stokesCurves = []
         
@@ -103,7 +106,14 @@ class EPPE(object):
             orbAxisAng = systems.catalogue['orbAxisAng'][i]
             polEff = systems.catalogue['polEff'][i]
             
-            times = np.random.uniform(0,1,1)*Porb+np.linspace(0, intTime/24., nPoints)
+            if intTime is None:
+                intTimeTemp = np.min([Porb*24., 30*24.])
+            else:
+                intTimeTemp = intTime
+            
+            nPoints = int(np.rint(intTimeTemp/expTime))
+            
+            times = np.random.uniform(0,1,1)*Porb+np.linspace(0, intTimeTemp/24., nPoints)
             phases = t_to_phase(times, Porb)
             
             if photonNoise:
@@ -132,3 +142,17 @@ class EPPE(object):
             
         return stokesCurves
     
+    def compute_FOM(self, systems, expTime=1., intTime=None):
+        stokesCurves = self.observe_polarization(systems, expTime, intTime, photonNoise=True)
+        stokesCurves_ideal = self.observe_polarization(systems, expTime, intTime, photonNoise=False)
+        
+        foms = []
+        
+        for i in range(len(stokesCurves)):
+            measure = np.sqrt(stokesCurves[i][1]**2+stokesCurves[i][2]**2)/stokesCurves[i][0]
+            truth = np.sqrt(stokesCurves_ideal[i][1]**2+stokesCurves_ideal[i][2]**2)/stokesCurves_ideal[i][0]
+            
+            foms.append((np.max(truth)-np.min(truth))/np.std(measure-truth))
+            
+        return np.array(foms)
+        
