@@ -6,7 +6,7 @@ import astropy.constants as const
 import pandas as pd
 
 class Systems(object):
-    def __init__(self, load=True, fname='compositepars_with_inclinations.csv', complete=True, comment='#', nPlanets=300):
+    def __init__(self, load=True, fname='compositepars_crossMatched.csv', complete=True, comment='#', nPlanets=300):
         if load:
             self.catalogue = self.load_planet_catalogue(fname=fname, complete=complete, comment=comment)
             # self.catalogue = self.load_crossmatch_planet_catalogue(complete=complete, comment=comment)
@@ -14,7 +14,7 @@ class Systems(object):
             self.catalogue = self.generate_planet_catalogue(nPlanets)
         return
     
-    def load_planet_catalogue(self, fname='compositepars_with_inclinations.csv', complete=True, comment='#'):
+    def load_planet_catalogue(self, fname='compositepars_crossMatched.csv', complete=True, comment='#'):
         data = pd.read_csv(fname, comment=comment)
         good = np.where(np.logical_and(np.logical_and(np.logical_and(np.logical_and(np.logical_and(np.logical_and(
                             np.logical_or(np.isfinite(data['fpl_radj']),np.isfinite(data['fpl_bmassj'])),
@@ -32,22 +32,24 @@ class Systems(object):
         masses = np.array(data['fpl_bmassj'])*const.M_jup.value/const.M_earth.value
         a = np.array(data['fpl_smax'])*const.au.value
         per = np.array(data['fpl_orbper'])
+        t0 = np.array(data['fpl_tranmid'])
         inc = np.array(data['fpl_orbincl'])
         orbAxisAng = np.random.uniform(0,360,len(name))
         e = np.array(data['fpl_eccen'])
-        argp = np.random.uniform(0,360,len(name))
+        argp = np.array(data['fpl_orblper'])
         dist = np.array(data['fst_dist'])*const.pc.value
         teff = np.array(data['fst_teff'])
         rstar = np.array(data['fst_rad'])*const.R_sun.value
+        ra = np.array(data['ra'])
+        dec = np.array(data['dec'])
         
-        e[np.isnan(e)] = 0
-        inc[np.isnan(inc)] = np.arccos(np.random.uniform(0,1,len(inc[np.isnan(inc)])))*180/np.pi
+        t0[np.isnan(t0)] = 0.
+        e[np.isnan(e)] = 0.
+        argp[e==0] = 90.
+        argp[np.isnan(argp)] = np.random.uniform(0.,360.,len(argp[np.isnan(argp)]))
+        inc[np.isnan(inc)] = np.arccos(np.random.uniform(0.,1.,len(inc[np.isnan(inc)])))*180./np.pi
         
         Omega = 270.*np.ones(len(a))
-        
-        if False:
-            i = 1
-            Omega = 1
         
         if complete:
             slope1 = 0.2790
@@ -80,8 +82,10 @@ class Systems(object):
         polEff = 1.*np.ones_like(radii)
         
         catalogue = {'name': name, 'rp': radii, 'a': a, 'per': per,
-                     'inc': inc, 'orbAxisAng': orbAxisAng, 'e': e,
+                     'inc': inc, 'orbAxisAng': orbAxisAng,
+                     't0': t0, 'e': e, 'argp': argp,
                      'dist': dist, 'teff': teff, 'rstar': rstar,
+                     'ra': ra, 'dec': dec,
                      'albedo': albedo, 'polEff': polEff}
         
         return catalogue
@@ -91,13 +95,17 @@ class Systems(object):
         radii = 1.*const.R_jup.value*np.ones(nPlanets)
         a = 0.05*const.au.value*np.ones(nPlanets)
         per = 3.*np.ones(nPlanets)
+        t0 = 0.*np.ones(nPlanets)
         inc = 90.*np.ones(nPlanets)
         e = 0.*np.ones(nPlanets)
+        argp = 90.*np.ones(nPlanets)
         dist = 10.*np.ones(nPlanets)*const.pc.value
         teff = 5000.*np.ones(nPlanets)
         rstar = 1.*const.R_sun.value*np.ones(nPlanets)
+        ra = np.random.uniform(0.,360.,nPlanets)
+        dec = np.random.uniform(-90.,90.,nPlanets)
         
-        orbAxisAng = np.random.uniform(0,360,nPlanets)
+        orbAxisAng = np.random.uniform(0.,360.,nPlanets)
         
         albedo = 1.*np.ones_like(radii)
         polEff = 1.*np.ones_like(radii)
@@ -105,8 +113,10 @@ class Systems(object):
         name = np.arange(nPlanets).astype(str)
         
         catalogue = {'name': name, 'rp': radii, 'a': a, 'per': per,
-                     'inc': inc, 'orbAxisAng': orbAxisAng, 'e': e,
+                     'inc': inc, 'orbAxisAng': orbAxisAng,
+                     't0': t0, 'e': e, 'argp': argp,
                      'dist': dist, 'teff': teff, 'rstar': rstar,
+                     'ra': ra, 'dec': dec,
                      'albedo': albedo, 'polEff': polEff}
         
         return catalogue

@@ -37,7 +37,7 @@ class EPPE(object):
         
         return np.rint(fplanets), np.rint(fstars), np.rint(fPhotNoise)
     
-    def observe_photometric(self, systems, expTime=1., intTime=None, photonNoise=True):
+    def observe_photometric(self, systems, expTime=1., intTime=None, photonNoise=True, pStart=None):
         
         fplanets, fstars, _ = self.expose_photometric(systems, expTime)
         
@@ -47,15 +47,13 @@ class EPPE(object):
         phasesList = []
         
         for i in range(len(fplanets)):
-            # t0 = systems.catalogue['t0'][i]
-            t0 = 0 # FIX
+            t0 = systems.catalogue['t0'][i]
             dist = systems.catalogue['dist'][i]
             Porb = systems.catalogue['per'][i]
             a = systems.catalogue['a'][i]
             inc = systems.catalogue['inc'][i]
             e = systems.catalogue['e'][i]
-            # argp = systems.catalogue['argp'][i]
-            argp = 90 # FIX
+            argp = systems.catalogue['argp'][i]
             orbAxisAng = systems.catalogue['orbAxisAng'][i]
             
             if intTime is None:
@@ -65,7 +63,12 @@ class EPPE(object):
             
             nPoints = int(np.rint(intTimeTemp/expTime))
             
-            times = np.random.uniform(0,1,1)*Porb+np.linspace(0, intTimeTemp/24., nPoints)
+            if pStart is None:
+                pStartTemp = np.random.uniform(0,1,1)
+            else:
+                pStartTemp = pStart
+            
+            times = pStartTemp*Porb+np.linspace(0, intTimeTemp/24., nPoints)
             phases = t_to_phase(times, Porb)
             timesList.append(times)
             phasesList.append(phases)
@@ -86,7 +89,7 @@ class EPPE(object):
             
         return fplanetsObs, fstarsObs, timesList, phasesList
 
-    def observe_polarization(self, systems, expTime=1., intTime=None, photonNoise=True):
+    def observe_polarization(self, systems, expTime=1., intTime=None, photonNoise=True, pStart=None):
         
         fplanetObs, fstarObs, _ = self.expose_photometric(systems, expTime)
         
@@ -94,15 +97,13 @@ class EPPE(object):
         
         for i in range(len(fplanetObs)):
             
-            # t0 = systems.catalogue['t0'][i]
-            t0 = 0 # FIX
+            t0 = systems.catalogue['t0'][i]
             dist = systems.catalogue['dist'][i]
             Porb = systems.catalogue['per'][i]
             a = systems.catalogue['a'][i]
             inc = systems.catalogue['inc'][i]
             e = systems.catalogue['e'][i]
-            # argp = systems.catalogue['argp'][i]
-            argp = 90 # FIX
+            argp = systems.catalogue['argp'][i]
             orbAxisAng = systems.catalogue['orbAxisAng'][i]
             polEff = systems.catalogue['polEff'][i]
             
@@ -113,7 +114,12 @@ class EPPE(object):
             
             nPoints = int(np.rint(intTimeTemp/expTime))
             
-            times = np.random.uniform(0,1,1)*Porb+np.linspace(0, intTimeTemp/24., nPoints)
+            if pStart is None:
+                pStartTemp = np.random.uniform(0,1,1)
+            else:
+                pStartTemp = pStart
+            
+            times = pStartTemp*Porb+np.linspace(0, intTimeTemp/24., nPoints)
             phases = t_to_phase(times, Porb)
             
             if photonNoise:
@@ -143,8 +149,8 @@ class EPPE(object):
         return stokesCurves
     
     def compute_FOM(self, systems, expTime=1., intTime=None):
-        stokesCurves = self.observe_polarization(systems, expTime, intTime, photonNoise=True)
-        stokesCurves_ideal = self.observe_polarization(systems, expTime, intTime, photonNoise=False)
+        stokesCurves = self.observe_polarization(systems, expTime, intTime, photonNoise=True, pStart=0)
+        stokesCurves_ideal = self.observe_polarization(systems, expTime, intTime, photonNoise=False, pStart=0)
         
         foms = []
         
@@ -152,7 +158,9 @@ class EPPE(object):
             measure = np.sqrt(stokesCurves[i][1]**2+stokesCurves[i][2]**2)/stokesCurves[i][0]
             truth = np.sqrt(stokesCurves_ideal[i][1]**2+stokesCurves_ideal[i][2]**2)/stokesCurves_ideal[i][0]
             
-            foms.append((np.max(truth)-np.min(truth))/np.std(measure-truth))
+            std = np.std((measure-truth)[np.logical_or(stokesCurves[i][-1]<0.15, stokesCurves[i][-1]>0.85)])
+            
+            foms.append((np.max(truth)-np.min(truth))/std)
             
         return np.array(foms)
         
