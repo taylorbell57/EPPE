@@ -1,14 +1,17 @@
 # Author: Taylor James Bell
-# Last Update: 2019-01-28
+# Last Update: 2019-02-26
+
+from .KeplerOrbit import KeplerOrbit
 
 import numpy as np
-from .KeplerOrbit import KeplerOrbit
+from astropy.convolution import convolve, Box1DKernel
+import matplotlib.pyplot as plt
 
 def lambert_scatter(theta, stokes):
     """Compute the Lambertian scattering flux phase function.
     
     Args:
-        scatAngle (ndarray): The scattering angle.
+        theta (ndarray): The scattering angle.
     
     Returns:
         ndarray: The Lambertian scattering flux phase function evaluated at scatAngle.
@@ -17,21 +20,34 @@ def lambert_scatter(theta, stokes):
     
     return np.abs((np.sin(theta*np.pi/180)+(np.pi-theta*np.pi/180)*np.cos(theta*np.pi/180))/np.pi)*stokes
 
-def rayleigh_scatter(theta, stokes):
+def rayleigh_scatter(theta):
     """Compute the Rayleigh scattering polarization phase function.
     
     Args:
-        scatAngle (ndarray): The scattering angle.
+        theta (ndarray): The scattering angle.
     
     Returns:
         ndarray: The Rayleigh scattering polarization phase function evaluated at theta.
     
     """
-    matrix = 3./4.*np.array([[np.cos(theta*np.pi/180)**2+1, np.cos(theta*np.pi/180)**2-1, 0, 0],
-                            [np.cos(theta*np.pi/180)**2-1, np.cos(theta*np.pi/180)**2+1, 0, 0],
-                            [0, 0, 2*np.cos(theta*np.pi/180), 0],
-                            [0, 0, 0, 2*np.cos(theta*np.pi/180)]])
-    return np.matmul(matrix, stokes).reshape(4,-1)
+    
+    return np.sin(theta*np.pi/180)**2/(1+np.cos(theta*np.pi/180)**2)
+
+# def rayleigh_scatter_website(theta, stokes):
+#     """Compute the Rayleigh scattering polarization phase function.
+    
+#     Args:
+#         theta (float): The scattering angle.
+    
+#     Returns:
+#         ndarray: The Rayleigh scattering polarization phase function evaluated at theta.
+    
+#     """
+#     matrix = 3./4.*np.array([[np.cos(theta*np.pi/180)**2+1, np.cos(theta*np.pi/180)**2-1, 0, 0],
+#                             [np.cos(theta*np.pi/180)**2-1, np.cos(theta*np.pi/180)**2+1, 0, 0],
+#                             [0, 0, 2*np.cos(theta*np.pi/180), 0],
+#                             [0, 0, 0, 2*np.cos(theta*np.pi/180)]])
+#     return np.matmul(matrix, stokes).reshape(4,-1)
 
 def rotate(phi, stokes):
     Qprime = stokes[1]*np.cos(2*phi*np.pi/180) + stokes[2]*np.sin(2*phi*np.pi/180)
@@ -99,12 +115,146 @@ def polarization_apparentAngles(times, stokes, polEff, dist, Porb, a, inc=90, e=
     r = np.array(orb.xyz(times))
     angs = xyz_to_scatAngle(r, dist)
     
-    lambertCurve = lambert_scatter(angs+180, stokes)[0]
-    rayStokesCurve = np.array([rayleigh_scatter(ang, Ii) for ang in angs])[:,:,0].T*lambertCurve[np.newaxis,:]
-    rayStokesCurve[1:] *= polEff
+    rayStokesCurve = lambert_scatter(angs+180, stokes)
+    rayStokesCurve[1] += rayStokesCurve[0]*rayleigh_scatter(angs)*polEff
     
     scatPlane_angle = compute_scatPlane_angle(times, orb, dist)
     rayStokesCurve = rotate(scatPlane_angle, rayStokesCurve)
     rayStokesCurve = rotate(orbAxisAng, rayStokesCurve)
     
     return rayStokesCurve
+
+def plot_lightcurve(stokesCurve, filt, fstar=None, stokesCurve_ideal=None, highPassSize=20, lines=False):
+    
+    if fstar is None:
+        fstar = stokesCurve[0]
+    
+    fig, ax = plt.subplots(1, 1, figsize=(12,4))
+
+    x = stokesCurve[-1]
+    F = (stokesCurve[0]/np.median(fstar)-1)*1e6
+    order = np.argsort(x)
+    F = F[order]
+    x = x[order]
+    
+    ax.plot(x, F, '.', c='k')
+    
+    if lines and highPassSize is not None:
+        F_sig = np.append(np.append(F,F),F)
+        smoothed_F = convolve(F_sig, Box1DKernel(highPassSize))[len(F):2*len(F)]
+        
+        ax.plot(x, smoothed_F, '-', lw=3, c='k')
+    
+    if lines and stokesCurve_ideal is not None:
+        x_ideal = stokesCurve_ideal[-1]
+        F_ideal = (stokesCurve_ideal[0]/np.median(fstar)-1)*1e6
+        order_ideal = np.argsort(x_ideal)
+        F_ideal = F_ideal[order_ideal]
+        x_ideal = x_ideal[order_ideal]
+
+        ax.plot(x_ideal, F_ideal, '--', lw=3, c='k')
+
+
+#     ax.plot([0,1], [0,0], lw=1, c='k')
+    ax.set_ylabel(r'$\rm F_p/F_*~(ppm);~'+filt+'\mbox{-}Band$')
+    ax.set_xlabel(r'$\rm Orbital~Phase$')
+    ax.set_xlim(0,1)
+    plt.show()
+    plt.close(fig)
+    
+def plot_QU(stokesCurve, filt, stokesCurve_ideal=None, highPassSize=20, lines=False):
+    
+    fig, ax = plt.subplots(1, 1, figsize=(12,4))
+
+    x = stokesCurve[-1]
+    Q = stokesCurve[1]
+    U = stokesCurve[2]
+    order = np.argsort(x)
+    Q = Q[order]
+    U = U[order]
+    x = x[order]
+    
+    ax.plot(x, Q, '.', c='teal', label=r'$\rm Q_'+filt+'$')
+    ax.plot(x, U, '.', c='darkorange', label=r'$\rm U_'+filt+'$')
+    
+    if lines and highPassSize is not None:
+        Q_sig = np.append(np.append(Q,Q),Q)
+        U_sig = np.append(np.append(U,U),U)
+        smoothed_Q = convolve(Q_sig, Box1DKernel(highPassSize))[len(Q):2*len(Q)]
+        smoothed_U = convolve(U_sig, Box1DKernel(highPassSize))[len(U):2*len(U)]
+        
+        ax.plot(x, smoothed_Q, '-', lw=3, c='teal', label=r'$\rm Q_'+filt+'~Smoothed$')
+        ax.plot(x, smoothed_U, '-', lw=3, c='darkorange', label=r'$\rm U_'+filt+'~Smoothed$')
+
+    if lines and stokesCurve_ideal is not None:
+        x_ideal = stokesCurve_ideal[-1]
+        Q_ideal = stokesCurve_ideal[1]
+        U_ideal = stokesCurve_ideal[2]
+        order_ideal = np.argsort(x_ideal)
+        Q_ideal = Q_ideal[order_ideal]
+        U_ideal = U_ideal[order_ideal]
+        x_ideal = x_ideal[order_ideal]
+
+        ax.plot(x_ideal, Q_ideal, '--', lw=3, c='teal', label=r'$\rm Q_'+filt+'~ideal$')
+        ax.plot(x_ideal, U_ideal, '--', lw=3, c='darkorange', label=r'$\rm U_'+filt+'~ideal$')
+    
+    ax.plot([0,1], [0,0], lw=1, c='k')
+    ax.set_ylabel(r'$\rm Polarized~Flux~(photons)$')
+    ax.set_xlabel(r'$\rm Orbital~Phase$')
+    ax.set_xlim(0,1)
+    ax.legend(loc=6, bbox_to_anchor=(1,0.5))
+    plt.show()
+    plt.close(fig)
+    
+def plot_P(stokesCurve, filt, fstar=None, stokesCurve_ideal=None, highPassSize=20, lines=False):
+    
+    if fstar is None:
+        fstar = stokesCurve[0]
+    
+    fig, ax = plt.subplots(1, 1, figsize=(12,4))
+
+    x = stokesCurve[-1]
+    F = stokesCurve[0]
+    Q = stokesCurve[1]
+    U = stokesCurve[2]
+    P = np.sqrt(Q**2+U**2)/stokesCurve[0]
+    order = np.argsort(x)
+    F = F[order]
+    Q = Q[order]
+    U = U[order]
+    P = P[order]
+    x = x[order]
+    
+    ax.plot(x, P*1e6, '.', c='k', label=r'$\rm P_'+filt+'$')
+    
+    if lines and highPassSize is not None:
+        F_sig = np.append(np.append(F,F),F)
+        Q_sig = np.append(np.append(Q,Q),Q)
+        U_sig = np.append(np.append(U,U),U)
+        P_sig = np.append(np.append(P,P),P)
+        
+        smoothed_F = convolve(F_sig, Box1DKernel(highPassSize))[len(F):2*len(F)]
+        smoothed_Q = convolve(Q_sig, Box1DKernel(highPassSize))[len(Q):2*len(Q)]
+        smoothed_U = convolve(U_sig, Box1DKernel(highPassSize))[len(U):2*len(U)]
+        smoothed_P = convolve(P_sig, Box1DKernel(highPassSize))[len(P):2*len(P)]
+        presmoothed_P = np.sqrt(smoothed_Q**2+smoothed_U**2)/smoothed_F
+        
+        ax.plot(x, smoothed_P*1e6, '-', lw=3, c='k', label=r'$\rm P_'+filt+'~Smoothed$')
+        ax.plot(x, presmoothed_P*1e6, '-', lw=3, c='b', label=r'$\rm P_'+filt+'~Pre\mbox{-}Smoothed$')
+    
+    if lines and stokesCurve_ideal is not None:
+        x_ideal = stokesCurve_ideal[-1]
+        P_ideal = np.sqrt(stokesCurve_ideal[1]**2+stokesCurve_ideal[2]**2)/stokesCurve_ideal[0]
+        order_ideal = np.argsort(x_ideal)
+        P_ideal = P_ideal[order_ideal]
+        x_ideal = x_ideal[order_ideal]
+
+        ax.plot(x_ideal, P_ideal*1e6, '--', lw=3, c='k', label=r'$\rm P_'+filt+'~ideal$')
+    
+    ax.set_ylabel(r'$\rm Polarization~Fraction~(ppm)$')
+    ax.set_xlabel(r'$\rm Orbital~Phase$')
+    ax.set_xlim(0,1)
+    ax.set_ylim(0)
+    ax.legend(loc=6, bbox_to_anchor=(1,0.5))
+    plt.show()
+    plt.close(fig)

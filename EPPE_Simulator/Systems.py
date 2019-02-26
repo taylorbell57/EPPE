@@ -1,28 +1,42 @@
 # Author: Taylor James Bell
-# Last Update: 2019-01-28
+# Last Update: 2019-02-26
 
 import numpy as np
 import astropy.constants as const
 import pandas as pd
 
 class Systems(object):
-    def __init__(self, load=True, fname='compositepars_crossMatched.csv', complete=True, comment='#', nPlanets=300):
-        if load:
-            self.catalogue = self.load_planet_catalogue(fname=fname, complete=complete, comment=comment)
-            # self.catalogue = self.load_crossmatch_planet_catalogue(complete=complete, comment=comment)
+    def __init__(self, load=True, fname='compositepars_crossMatched.csv', complete=True, comment='#', nPlanets=300,
+                 albedo=0.3, polEff=1.0, randomOrientation=False):
+        
+        if albedo=='theo':
+            albedo = 0.3
+            self.updateFlag = True
         else:
-            self.catalogue = self.generate_planet_catalogue(nPlanets)
+            self.updateFlag = False
+        
+        if load:
+            self.catalogue = self.load_planet_catalogue(fname=fname, complete=complete, comment=comment,
+                                                        polEff=polEff, randomOrientation=randomOrientation,
+                                                        albedo=albedo)
+        else:
+            self.catalogue = self.generate_planet_catalogue(nPlanets, polEff=polEff, randomOrientation=randomOrientation,
+                                                            albedo=albedo)
+            
         return
     
-    def load_planet_catalogue(self, fname='compositepars_crossMatched.csv', complete=True, comment='#'):
+    def load_planet_catalogue(self, fname='compositepars_crossMatched.csv', complete=True, comment='#',
+                              albedo=0.3, polEff=0.5, randomOrientation=False):
         data = pd.read_csv(fname, comment=comment)
-        good = np.where(np.logical_and(np.logical_and(np.logical_and(np.logical_and(np.logical_and(np.logical_and(
+        good = np.where(np.logical_and(np.logical_and(np.logical_and(
+                        np.logical_and(np.logical_and(np.logical_and(np.logical_and(
                             np.logical_or(np.isfinite(data['fpl_radj']),np.isfinite(data['fpl_bmassj'])),
                             np.isfinite(data['fst_dist'])),
                             np.isfinite(data['fpl_orbper'])),
                             np.isfinite(data['fst_teff'])),
                             (data['fpl_orbper'] < 100.)),
                             np.isfinite(data['fst_rad'])),
+                            np.isfinite(data['fst_optmag'])),
                             np.isfinite(data['fpl_smax'])))[0]
         
         data = data.iloc[good]
@@ -34,12 +48,15 @@ class Systems(object):
         per = np.array(data['fpl_orbper'])
         t0 = np.array(data['fpl_tranmid'])
         inc = np.array(data['fpl_orbincl'])
-        orbAxisAng = np.random.uniform(0,360,len(name))
         e = np.array(data['fpl_eccen'])
         argp = np.array(data['fpl_orblper'])
         dist = np.array(data['fst_dist'])*const.pc.value
         teff = np.array(data['fst_teff'])
         rstar = np.array(data['fst_rad'])*const.R_sun.value
+        optMag = np.array(data['fst_optmag'])
+        optMagBand = np.array(data['fst_optmagband'])
+        nirMag = np.array(data['fst_nirmag'])
+        nirMagBand = np.array(data['fst_nirmagband'])
         ra = np.array(data['ra'])
         dec = np.array(data['dec'])
         
@@ -48,8 +65,14 @@ class Systems(object):
         argp[e==0] = 90.
         argp[np.isnan(argp)] = np.random.uniform(0.,360.,len(argp[np.isnan(argp)]))
         inc[np.isnan(inc)] = np.arccos(np.random.uniform(0.,1.,len(inc[np.isnan(inc)])))*180./np.pi
+        nirMagBand[np.isnan(nirMag)] = optMagBand[np.isnan(nirMag)]
+        nirMag[np.isnan(nirMag)] = optMag[np.isnan(nirMag)]
         
         Omega = 270.*np.ones(len(a))
+        if randomOrientation:
+            orbAxisAng = np.random.uniform(0,360,len(name))
+        else:
+            orbAxisAng = np.zeros(len(name))
         
         if complete:
             slope1 = 0.2790
@@ -78,19 +101,22 @@ class Systems(object):
                 else:
                     radii[i] = const4*masses[i]**(slope4)
         
-        albedo = 1.*np.ones_like(radii)
-        polEff = 1.*np.ones_like(radii)
+        albedo = albedo*np.ones_like(radii)
+        polEff = polEff*np.ones_like(radii)
+        teq = 0.25**0.25*teff*np.sqrt(rstar/a)
         
         catalogue = {'name': name, 'rp': radii, 'a': a, 'per': per,
                      'inc': inc, 'orbAxisAng': orbAxisAng,
-                     't0': t0, 'e': e, 'argp': argp,
+                     't0': t0, 'e': e, 'argp': argp, 'teq': teq,
                      'dist': dist, 'teff': teff, 'rstar': rstar,
+                     'optMag': optMag, 'optMagBand': optMagBand,
+                     'nirMag': nirMag, 'nirMagBand': nirMagBand,
                      'ra': ra, 'dec': dec,
                      'albedo': albedo, 'polEff': polEff}
         
         return catalogue
     
-    def generate_planet_catalogue(self, nPlanets=300):
+    def generate_planet_catalogue(self, nPlanets=300, albedo=0.3, polEff=0.5, randomOrientation=False):
         
         radii = 1.*const.R_jup.value*np.ones(nPlanets)
         a = 0.05*const.au.value*np.ones(nPlanets)
@@ -102,24 +128,130 @@ class Systems(object):
         dist = 10.*np.ones(nPlanets)*const.pc.value
         teff = 5000.*np.ones(nPlanets)
         rstar = 1.*const.R_sun.value*np.ones(nPlanets)
+        optMag = 6.*np.ones(nPlanets)
+        optMagBand = np.array(['V' for i in range(nPlanets)])
+        nirMag = 7.*np.ones(nPlanets)
+        nirMagBand = np.array(['J' for i in range(nPlanets)])
         ra = np.random.uniform(0.,360.,nPlanets)
         dec = np.random.uniform(-90.,90.,nPlanets)
         
-        orbAxisAng = np.random.uniform(0.,360.,nPlanets)
+        if randomOrientation:
+            orbAxisAng = np.random.uniform(0.,360.,nPlanets)
+        else:
+            orbAxisAng = np.zeros(nPlanets)
         
-        albedo = 1.*np.ones_like(radii)
-        polEff = 1.*np.ones_like(radii)
+        albedo = albedo*np.ones_like(radii)
+        polEff = polEff*np.ones_like(radii)
+        teq = 0.25**0.25*teff*np.sqrt(rstar/a)
         
         name = np.arange(nPlanets).astype(str)
         
         catalogue = {'name': name, 'rp': radii, 'a': a, 'per': per,
                      'inc': inc, 'orbAxisAng': orbAxisAng,
-                     't0': t0, 'e': e, 'argp': argp,
+                     't0': t0, 'e': e, 'argp': argp, 'teq': teq,
                      'dist': dist, 'teff': teff, 'rstar': rstar,
+                     'optMag': optMag, 'optMagBand': optMagBand,
+                     'nirMag': nirMag, 'nirMagBand': nirMagBand,
                      'ra': ra, 'dec': dec,
                      'albedo': albedo, 'polEff': polEff}
         
         return catalogue
+    
+    def updateAlbedos(self, filt):
+        """Update the planetary albedos using the predictions from Sudarsky.
+        
+        Args:
+            filt: A string containing the filter's name
+        
+        Returns:
+            None
+        
+        """
+        
+        teq = self.catalogue['teq']
+        
+        jup = self.catalogue['rp']/const.R_earth.value > 4
+        cat1 = np.logical_and(teq<=150, jup)
+        cat2 = np.logical_and(np.logical_and(teq>150, teq<=350), jup)
+        cat3 = np.logical_and(np.logical_and(teq>350, teq<=900), jup)
+        cat4 = np.logical_and(np.logical_and(teq>900, teq<=1500), jup)
+        cat5 = np.logical_and(np.logical_and(teq>1500, teq<=2000), jup)
+        cat6 = np.logical_and(teq>2000, jup)
+        
+        u1 = 0.87
+        u2 = 1.00
+        u3 = 0.50
+        u4 = 0.20
+        u5 = 0.45
+        u6 = 0.05
+
+        b1 = 0.65
+        b2 = 0.98
+        b3 = 0.20
+        b4 = 0.07
+        b5 = 0.65
+        b6 = 0.05
+
+        v1 = 0.70
+        v2 = 0.95 
+        v3 = 0.10
+        v4 = 0.05 # Tres-2b (Ag = 0.0253 +/- 0.0072)
+        v5 = 0.40 # Kepler-7b (Ag = 0.32 +/- 0.03); tau Boo (Ag < 0.12)
+        v6 = 0.05 # WASP-12b (Ag < 0.064)
+
+        r1 = 0.65
+        r2 = 0.95
+        r3 = 0.05
+        r4 = 0.05
+        r5 = 0.40
+        r6 = 0.05
+
+        i1 = 0.60
+        i2 = 0.85
+        i3 = 0.02
+        i4 = 0.10
+        i5 = 0.55
+        i6 = 0.05
+        
+        if filt=='U':
+            self.catalogue['albedo'][cat1] = u1
+            self.catalogue['albedo'][cat2] = u2
+            self.catalogue['albedo'][cat3] = u3
+            self.catalogue['albedo'][cat4] = u4
+            self.catalogue['albedo'][cat5] = u5
+            self.catalogue['albedo'][cat6] = u6
+        elif filt=='B':
+            self.catalogue['albedo'][cat1] = b1
+            self.catalogue['albedo'][cat2] = b2
+            self.catalogue['albedo'][cat3] = b3
+            self.catalogue['albedo'][cat4] = b4
+            self.catalogue['albedo'][cat5] = b5
+            self.catalogue['albedo'][cat6] = b6
+        elif filt=='R':
+            self.catalogue['albedo'][cat1] = r1
+            self.catalogue['albedo'][cat2] = r2
+            self.catalogue['albedo'][cat3] = r3
+            self.catalogue['albedo'][cat4] = r4
+            self.catalogue['albedo'][cat5] = r5
+            self.catalogue['albedo'][cat6] = r6
+        elif filt=='I':
+            self.catalogue['albedo'][cat1] = i1
+            self.catalogue['albedo'][cat2] = i2
+            self.catalogue['albedo'][cat3] = i3
+            self.catalogue['albedo'][cat4] = i4
+            self.catalogue['albedo'][cat5] = i5
+            self.catalogue['albedo'][cat6] = i6
+        else:
+            self.catalogue['albedo'][cat1] = v1
+            self.catalogue['albedo'][cat2] = v2
+            self.catalogue['albedo'][cat3] = v3
+            self.catalogue['albedo'][cat4] = v4
+            self.catalogue['albedo'][cat5] = v5
+            self.catalogue['albedo'][cat6] = v6
+            
+        self.catalogue['albedo'][np.logical_not(jup)] = 0.3
+        
+        return
     
     def Fstar(self, filterObj, tBrights=None):
         """Calculate the stellar photon flux from each system.
@@ -195,14 +327,92 @@ class Systems(object):
         return albedo * fstar * (rp/a)**2
 
     def Fobs(self, fluxes):
+        """Account for the d^-2 drop-off in flux.
+        
+        Args:
+            fluxes (ndarray): The fluxes from each system.
+        
+        Returns:
+            ndarray: The observed fluxes from each system.
+        
+        """
         
         return fluxes/(4*np.pi*self.catalogue['dist']**2)
     
     def integrate_spec(self, flux, filterObj):
+        """Convert the spectral flux into photons/s.
+        
+        Args:
+            flux (ndarray): The spectral flux from each system.
+            filterObj (dictionary): The filter object containing the filter wavelengths and throughputs.
+        
+        Returns:
+            ndarray: The photon flux from each system.
+        
+        """
         
         dwav = filterObj['dwav'].reshape(1,-1)
         energies = const.h.value*const.c.value/filterObj['wavs'].reshape(1,-1)
         
         return np.sum(flux/energies*dwav, axis=1) 
     
+    def name_to_index(self, name):
+        """Get the array index of a particular planet.
+        
+        Args:
+            name (str): Name of planet in system array.
+        
+        Returns:
+            int: The array index of the particular planet.
+        
+        """
+        
+        if np.any(self.catalogue['name']==name):
+            i = np.where(self.catalogue['name']==name)[0][0]
+        else:
+            print('No such planet!')
+            i = None
+        
+        return i
+    
+    def index_details(self, i):
+        """Print some details about a particular planet.
+        
+        Args:
+            i (int): Index of planet in system array.
+        
+        Returns:
+            None
+        
+        """
+        
+        if i >= len(self.catalogue['name']) or i < 0:
+            print('Index '+str(i)+' out of range!')
+        else:
+            print('Name:', self.catalogue['name'][i])
+            print('Radius: '+str(np.round(self.catalogue['rp'][i]/const.R_jup.value, 2))+' Rjup')
+            print('Period:', np.round(self.catalogue['per'][i], 2), 'days')
+            print('Equilibrium Temperature: '+str(int(np.rint(self.catalogue['teq'][i])))+' K')
+            print('Transit Depth: '+str(np.round((self.catalogue['rp'][i]/self.catalogue['rstar'][i])**2*100, 3))+'%')
+            print('Distance: '+str(int(np.rint(self.catalogue['dist'][i]/const.pc.value)))+' pc')
+        
+        return
+    
+    def name_details(self, name):
+        """Print some details about a particular planet.
+        
+        Args:
+            name (str): Name of planet in system array.
+        
+        Returns:
+            None
+        
+        """
+        
+        i = self.name_to_index(name)
+        
+        if i is not None:
+            self.index_details(i)
+        
+        return
     
