@@ -8,34 +8,47 @@ from .KeplerOrbit import KeplerOrbit
 
 
 class EPPE(object):
-    def __init__(self, systems, rad=0.15, trans=0.7, filt='V', filterObj=None, sensFloor=None):
+    def __init__(self, systems, rad=0.15, trans=0.7, filt='V', filterObj=None, usePhoenix=True,
+                 fNoiseFloor=None, pNoiseFloor=None):
         
         self.systems = systems
+        self.usePhoenix = usePhoenix
         
         self.rad = rad #m
         self.trans = trans #dimensionless (0-1)
         self.filterObj = filterObj
-        self.sensFloor = sensFloor
+        self.fNoiseFloor = fNoiseFloor
+        self.pNoiseFloor = pNoiseFloor
         
-        if filt=='V' or (filt is None and self.filterObj is None):
+        if (filt=='V' or filt is None) and self.filterObj is None:
             wavCent = 551e-9 #m
             wavWidth = 88e-9 #m
-        elif filt=='U':
+        elif filt=='U' and self.filterObj is None:
             wavCent = 365e-9 # m
             wavWidth = 66e-9 # m
-        elif filt=='B':
+        elif filt=='B' and self.filterObj is None:
             wavCent = 445e-9 # m
             wavWidth = 94e-9 # m
-        elif filt=='R':
+        elif filt=='R' and self.filterObj is None:
             wavCent = 658e-9 # m
             wavWidth = 138e-9 # m
-        elif filt=='I':
+        elif filt=='I' and self.filterObj is None:
             wavCent = 806e-9 # m
             wavWidth = 149e-9 # m
+        
         if self.filterObj is None:
-            nwav = 100
-            dwav = wavWidth/nwav*np.ones(nwav)
-            wavs = np.linspace(wavCent-wavWidth/2., wavCent+wavWidth/2., nwav)
+            if self.usePhoenix:
+                wavs = np.logspace(np.log10(3000), np.log10(25000), 212027, endpoint=True)/1e10
+                wavs = wavs[np.logical_and(wavCent-wavWidth/2. < wavs, wavs < wavCent+wavWidth/2.)]
+                nwav = len(wavs)
+                dwav = (np.roll(wavs, -1)-np.roll(wavs, 1))/2.
+                dwav[0] = dwav[1]
+                dwav[-1] = dwav[-2]
+            else:
+                nwav = 100
+                dwav = wavWidth/nwav*np.ones(nwav)
+                wavs = np.linspace(wavCent-wavWidth/2., wavCent+wavWidth/2., nwav)
+            
             tput = np.ones_like(wavs)
             
             self.filterObj = {'wavs': wavs, 'tput': tput, 'dwav': dwav}
@@ -50,7 +63,7 @@ class EPPE(object):
         
         teleFactor = self.trans*(expTime*3600)*(np.pi*self.rad**2)
         
-        fstars = teleFactor*self.systems.Fobs(self.systems.Fstar(self.filterObj))
+        fstars = teleFactor*self.systems.Fobs(self.systems.Fstar(self.filterObj, usePhoenix=self.usePhoenix))
         fplanets = teleFactor*self.systems.Fobs(self.systems.Fp(self.filterObj))
         fPhotNoise = np.sqrt(fstars+fplanets)
         
@@ -108,7 +121,8 @@ class EPPE(object):
             
         return fplanetsObs, fstarsObs, timesList, phasesList
 
-    def observe_polarization(self, expTime=1., intTime=None, photonNoise=True, pStart=None):
+    def observe_polarization(self, expTime=1., intTime=None, pStart=None,
+                             photonNoise=True, stellarVariability=False, stellarAmp=0.001, stellarPeriod=4*np.pi):
         
         fplanetObs, fstarObs, _ = self.expose_photometric(expTime)
         
@@ -147,13 +161,22 @@ class EPPE(object):
                                                    size=3*nPoints).reshape(3,nPoints)
                 stokes = np.append(nPhotons[np.newaxis,:], nPhotons_stokes, axis=0)
 
-                nPhotonsStar = fstarObs[i] + np.random.normal(loc=0, scale=np.sqrt(fstarObs[i]), size=nPoints)
+                if stellarVariability:
+                    stFluct = 1+stellarAmp*np.cos(times/stellarPeriod*2*np.pi+np.random.uniform()*2*np.pi)
+                    nPhotonsStar = fstarObs[i]*stFluct
+                else:
+                    nPhotonsStar = fstarObs[i]
+                nPhotonsStar += np.random.normal(loc=0, scale=np.sqrt(fstarObs[i]), size=nPoints)
                 nPhotonsStar_stokes = np.random.normal(loc=0, scale=np.sqrt(fstarObs[i]/3.)/2.,
                                                        size=3*nPoints).reshape(3,nPoints)
                 stokesStar = np.append(nPhotonsStar[np.newaxis, :], nPhotonsStar_stokes, axis=0)
             else:
                 stokes = np.array([fplanetObs[i], 0, 0, 0]).reshape(4,1)
                 stokesStar = np.array([fstarObs[i], 0, 0, 0]).reshape(4,1)
+                
+                if stellarVariability:
+                    stFluct = 1+stellarAmp*np.cos(times/stellarPeriod*2*np.pi+np.random.uniform()*2*np.pi)
+                    stokesStar *= stFluct
             
             stokesCurve = polarization_apparentAngles(times, stokes, polEff, dist, Porb, a,
                                                       inc, e, argp, orbAxisAng, t0)

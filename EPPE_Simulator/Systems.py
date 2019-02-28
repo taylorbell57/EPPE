@@ -1,9 +1,12 @@
 # Author: Taylor James Bell
+# PHOENIX stellar spectra taken from https://doi.org/10.1051/0004-6361/201219058
+    # and downloaded from http://phoenix.astro.physik.uni-goettingen.de
 # Last Update: 2019-02-26
 
 import numpy as np
 import astropy.constants as const
 import pandas as pd
+from astropy.io import fits
 
 class Systems(object):
     def __init__(self, load=True, fname='compositepars_crossMatched.csv', complete=True, comment='#', nPlanets=300,
@@ -53,6 +56,13 @@ class Systems(object):
         dist = np.array(data['fst_dist'])*const.pc.value
         teff = np.array(data['fst_teff'])
         rstar = np.array(data['fst_rad'])*const.R_sun.value
+        logg = np.array(data['fst_logg'])
+        logg[np.isnan(logg)] = 4.5
+        logg = logg - (logg%0.5) + np.rint((logg%0.5)*2)/2.
+        feh = np.array(data['fst_met'])
+        feh[np.isnan(feh)] = 0.
+        feh = (feh - (feh%0.5) + np.rint((feh%0.5)*2)/2.)
+        feh[feh<-2.] = (feh[feh<-2.] - (feh[feh<-2.]%1) + np.rint((feh[feh<-2.]%1)))
         optMag = np.array(data['fst_optmag'])
         optMagBand = np.array(data['fst_optmagband'])
         nirMag = np.array(data['fst_nirmag'])
@@ -109,6 +119,7 @@ class Systems(object):
                      'inc': inc, 'orbAxisAng': orbAxisAng,
                      't0': t0, 'e': e, 'argp': argp, 'teq': teq,
                      'dist': dist, 'teff': teff, 'rstar': rstar,
+                     'logg': logg, 'feh': feh,
                      'optMag': optMag, 'optMagBand': optMagBand,
                      'nirMag': nirMag, 'nirMagBand': nirMagBand,
                      'ra': ra, 'dec': dec,
@@ -128,6 +139,8 @@ class Systems(object):
         dist = 10.*np.ones(nPlanets)*const.pc.value
         teff = 5000.*np.ones(nPlanets)
         rstar = 1.*const.R_sun.value*np.ones(nPlanets)
+        feh = 0.*np.ones(nPlanets)
+        logg = 4.5*np.ones(nPlanets)
         optMag = 6.*np.ones(nPlanets)
         optMagBand = np.array(['V' for i in range(nPlanets)])
         nirMag = 7.*np.ones(nPlanets)
@@ -150,6 +163,7 @@ class Systems(object):
                      'inc': inc, 'orbAxisAng': orbAxisAng,
                      't0': t0, 'e': e, 'argp': argp, 'teq': teq,
                      'dist': dist, 'teff': teff, 'rstar': rstar,
+                     'logg': logg, 'feh': feh,
                      'optMag': optMag, 'optMagBand': optMagBand,
                      'nirMag': nirMag, 'nirMagBand': nirMagBand,
                      'ra': ra, 'dec': dec,
@@ -253,19 +267,20 @@ class Systems(object):
         
         return
     
-    def Fstar(self, filterObj, tBrights=None):
+    def Fstar(self, filterObj, usePhoenix=True, tBrights=None):
         """Calculate the stellar photon flux from each system.
         
         Args:
             filterObj (dictionary): The filter object containing the filter wavelengths and throughputs.
-            tBrights (ndarray): The brightness temperatures to use if not stellar effective temperature.
+            usePhoenix (bool, optional): Whether or not to use PHOENIX stellar models for fluxes.
+            tBrights (ndarray, optional): The brightness temperatures to use if not stellar effective temperature.
         
         Returns:
             ndarray: The photon flux from each system.
         
         """
         
-        return self.integrate_spec( self.Fstar_spec(filterObj, tBrights=None), filterObj )
+        return self.integrate_spec( self.Fstar_spec(filterObj, usePhoenix=usePhoenix, tBrights=tBrights), filterObj )
     
     def Fp(self, filterObj, tBrights=None):
         """Calculate the planetary photon flux from each system.
@@ -281,11 +296,12 @@ class Systems(object):
         
         return self.integrate_spec( self.Fp_spec(filterObj, tBrights=None), filterObj )
     
-    def Fstar_spec(self, filterObj, tBrights=None):
+    def Fstar_spec(self, filterObj, usePhoenix=True, tBrights=None):
         """Calculate the stellar spectral flux from each system.
         
         Args:
             filterObj (dictionary): The filter object containing the filter wavelengths and throughputs.
+            usePhoenix (bool, optional): Whether or not to use PHOENIX stellar models for fluxes.
             tBrights (ndarray): The stellar brightness temperatures to use if not stellar effective temperature.
         
         Returns:
@@ -293,18 +309,51 @@ class Systems(object):
         
         """
         
-        if tBrights is None:
-            tBrights = self.catalogue['teff']
-        tBrights = tBrights.reshape(-1,1)
-        wavs = filterObj['wavs'].reshape(1,-1)
+        if usePhoenix:
+            teff = self.catalogue['teff']
+            logg = -self.catalogue['logg']
+            feh = self.catalogue['feh']
+            
+            wavs = np.logspace(np.log10(3000), np.log10(25000), 212027, endpoint=True)/1e10
+#             inds = np.where(np.logical_and(wavCent-wavWidth/2. < wavs, wavs < wavCent+wavWidth/2.))
+            inds = np.where(np.logical_and(np.min(filterObj['wavs']) <= wavs, wavs <= np.max(filterObj['wavs'])))[0]
+            
+            #lte11800-6.00-4.0.PHOENIX-ACES-AGSS-COND-2011-HiRes
+            
+            teffStr = np.copy(teff)
+            teffStr[teff<=7000] = teffStr[teff<=7000] - (teffStr[teff<=7000]%100) + np.rint((teffStr[teff<=7000]%100)/100)*100
+            teffStr[teff>7000] = teffStr[teff>7000] - (teffStr[teff>7000]%200) + np.rint((teffStr[teff>7000]%200)/200)*200
+            teffStr[teff>12000] = 12000
+            
+            folder = '/home/taylor/Documents/Research/PHOENIX/MedResFITS/R10000FITS/'
+            files = [folder+'lte'+str(int(teffStr[i])).zfill(5)
+                     +("{0:+.02f}".format(logg[i]) if logg[i]!=0 else '-0.00')
+                     +("{0:+.01f}".format(feh[i]) if feh[i]!=0 else '-0.0')
+                     +'.PHOENIX-ACES-AGSS-COND-2011-HiRes.fits' for i in range(len(teff))]
+
+            files_unique, inverse_inds = np.unique(files, return_inverse=True)
+            
+            B_wav_unique = []
+            for fname in files_unique:
+                with fits.open(fname) as file:
+                    B_wav_unique.append(file[0].data[inds])
+            
+            B_wav = np.array([B_wav_unique[i] for i in inverse_inds])
+            
+        else:
+            if tBrights is None:
+                tBrights = self.catalogue['teff']
+            tBrights = tBrights.reshape(-1,1)
+            wavs = filterObj['wavs'].reshape(1,-1)
+
+            a = (2.*const.h.value*const.c.value**2/wavs**5)
+            b = (const.h.value*const.c.value)/(wavs*const.k_B.value)
+
+            B_wav = a/np.expm1(b/tBrights) * np.pi #pi for stellar circle of unit radius
+        
         tputs = filterObj['tput'].reshape(1,-1)
         
-        a = (2.*const.h.value*const.c.value**2/wavs**5)
-        b = (const.h.value*const.c.value)/(wavs*const.k_B.value)
-        
-        B_wav = a/np.expm1(b/tBrights)
-        
-        return tputs * B_wav * (np.pi*self.catalogue['rstar']**2).reshape(-1,1)
+        return tputs * B_wav * (self.catalogue['rstar']**2).reshape(-1,1)
 
     def Fp_spec(self, filterObj, tBrights=None):
         """Calculate the reflected photon flux from each system.

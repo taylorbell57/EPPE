@@ -124,7 +124,7 @@ def polarization_apparentAngles(times, stokes, polEff, dist, Porb, a, inc=90, e=
     
     return rayStokesCurve
 
-def plot_lightcurve(stokesCurve, filt, fstar=None, stokesCurve_ideal=None, highPassSize=20, lines=False):
+def plot_lightcurve(stokesCurve, filt, fstar=None, stokesCurve_ideal=None, highPassSize=None, lines=False):
     
     if fstar is None:
         fstar = stokesCurve[0]
@@ -145,7 +145,7 @@ def plot_lightcurve(stokesCurve, filt, fstar=None, stokesCurve_ideal=None, highP
         
         ax.plot(x, smoothed_F, '-', lw=3, c='k')
     
-    if lines and stokesCurve_ideal is not None:
+    if lines and (stokesCurve_ideal is not None):
         x_ideal = stokesCurve_ideal[-1]
         F_ideal = (stokesCurve_ideal[0]/np.median(fstar)-1)*1e6
         order_ideal = np.argsort(x_ideal)
@@ -162,7 +162,7 @@ def plot_lightcurve(stokesCurve, filt, fstar=None, stokesCurve_ideal=None, highP
     plt.show()
     plt.close(fig)
     
-def plot_QU(stokesCurve, filt, stokesCurve_ideal=None, highPassSize=20, lines=False):
+def plot_QU(stokesCurve, filt, stokesCurve_ideal=None, highPassSize=None, lines=False):
     
     fig, ax = plt.subplots(1, 1, figsize=(12,4))
 
@@ -186,7 +186,7 @@ def plot_QU(stokesCurve, filt, stokesCurve_ideal=None, highPassSize=20, lines=Fa
         ax.plot(x, smoothed_Q, '-', lw=3, c='teal', label=r'$\rm Q_'+filt+'~Smoothed$')
         ax.plot(x, smoothed_U, '-', lw=3, c='darkorange', label=r'$\rm U_'+filt+'~Smoothed$')
 
-    if lines and stokesCurve_ideal is not None:
+    if lines and (stokesCurve_ideal is not None):
         x_ideal = stokesCurve_ideal[-1]
         Q_ideal = stokesCurve_ideal[1]
         U_ideal = stokesCurve_ideal[2]
@@ -206,10 +206,7 @@ def plot_QU(stokesCurve, filt, stokesCurve_ideal=None, highPassSize=20, lines=Fa
     plt.show()
     plt.close(fig)
     
-def plot_P(stokesCurve, filt, fstar=None, stokesCurve_ideal=None, highPassSize=20, lines=False):
-    
-    if fstar is None:
-        fstar = stokesCurve[0]
+def plot_P(stokesCurve, filt, stokesCurve_ideal=None, highPassSize=None, lines=False):
     
     fig, ax = plt.subplots(1, 1, figsize=(12,4))
 
@@ -242,7 +239,7 @@ def plot_P(stokesCurve, filt, fstar=None, stokesCurve_ideal=None, highPassSize=2
         ax.plot(x, smoothed_P*1e6, '-', lw=3, c='k', label=r'$\rm P_'+filt+'~Smoothed$')
         ax.plot(x, presmoothed_P*1e6, '-', lw=3, c='b', label=r'$\rm P_'+filt+'~Pre\mbox{-}Smoothed$')
     
-    if lines and stokesCurve_ideal is not None:
+    if lines and (stokesCurve_ideal is not None):
         x_ideal = stokesCurve_ideal[-1]
         P_ideal = np.sqrt(stokesCurve_ideal[1]**2+stokesCurve_ideal[2]**2)/stokesCurve_ideal[0]
         order_ideal = np.argsort(x_ideal)
