@@ -197,71 +197,72 @@ class Systems(object):
         u3 = 0.50
         u4 = 0.20
         u5 = 0.45
-        u6 = 0.05
+        u6 = 0.05*1.5
 
         b1 = 0.65
         b2 = 0.98
         b3 = 0.20
         b4 = 0.07
         b5 = 0.65
-        b6 = 0.05
+        b6 = 0.05*1.5
 
         v1 = 0.70
         v2 = 0.95 
         v3 = 0.10
         v4 = 0.05 # Tres-2b (Ag = 0.0253 +/- 0.0072)
         v5 = 0.40 # Kepler-7b (Ag = 0.32 +/- 0.03); tau Boo (Ag < 0.12)
-        v6 = 0.05 # WASP-12b (Ag < 0.064)
+        v6 = 0.05*1.5 # WASP-12b (Ag < 0.064)
 
         r1 = 0.65
         r2 = 0.95
         r3 = 0.05
         r4 = 0.05
         r5 = 0.40
-        r6 = 0.05
+        r6 = 0.05*1.5
 
         i1 = 0.60
         i2 = 0.85
         i3 = 0.02
         i4 = 0.10
         i5 = 0.55
-        i6 = 0.05
+        i6 = 0.05*1.5
         
+        # divide everything by 1.5 to convert As to Ag
         if filt=='U':
-            self.catalogue['albedo'][cat1] = u1
-            self.catalogue['albedo'][cat2] = u2
-            self.catalogue['albedo'][cat3] = u3
-            self.catalogue['albedo'][cat4] = u4
-            self.catalogue['albedo'][cat5] = u5
-            self.catalogue['albedo'][cat6] = u6
+            self.catalogue['albedo'][cat1] = u1/1.5
+            self.catalogue['albedo'][cat2] = u2/1.5
+            self.catalogue['albedo'][cat3] = u3/1.5
+            self.catalogue['albedo'][cat4] = u4/1.5
+            self.catalogue['albedo'][cat5] = u5/1.5
+            self.catalogue['albedo'][cat6] = u6/1.5
         elif filt=='B':
-            self.catalogue['albedo'][cat1] = b1
-            self.catalogue['albedo'][cat2] = b2
-            self.catalogue['albedo'][cat3] = b3
-            self.catalogue['albedo'][cat4] = b4
-            self.catalogue['albedo'][cat5] = b5
-            self.catalogue['albedo'][cat6] = b6
+            self.catalogue['albedo'][cat1] = b1/1.5
+            self.catalogue['albedo'][cat2] = b2/1.5
+            self.catalogue['albedo'][cat3] = b3/1.5
+            self.catalogue['albedo'][cat4] = b4/1.5
+            self.catalogue['albedo'][cat5] = b5/1.5
+            self.catalogue['albedo'][cat6] = b6/1.5
         elif filt=='R':
-            self.catalogue['albedo'][cat1] = r1
-            self.catalogue['albedo'][cat2] = r2
-            self.catalogue['albedo'][cat3] = r3
-            self.catalogue['albedo'][cat4] = r4
-            self.catalogue['albedo'][cat5] = r5
-            self.catalogue['albedo'][cat6] = r6
+            self.catalogue['albedo'][cat1] = r1/1.5
+            self.catalogue['albedo'][cat2] = r2/1.5
+            self.catalogue['albedo'][cat3] = r3/1.5
+            self.catalogue['albedo'][cat4] = r4/1.5
+            self.catalogue['albedo'][cat5] = r5/1.5
+            self.catalogue['albedo'][cat6] = r6/1.5
         elif filt=='I':
-            self.catalogue['albedo'][cat1] = i1
-            self.catalogue['albedo'][cat2] = i2
-            self.catalogue['albedo'][cat3] = i3
-            self.catalogue['albedo'][cat4] = i4
-            self.catalogue['albedo'][cat5] = i5
-            self.catalogue['albedo'][cat6] = i6
+            self.catalogue['albedo'][cat1] = i1/1.5
+            self.catalogue['albedo'][cat2] = i2/1.5
+            self.catalogue['albedo'][cat3] = i3/1.5
+            self.catalogue['albedo'][cat4] = i4/1.5
+            self.catalogue['albedo'][cat5] = i5/1.5
+            self.catalogue['albedo'][cat6] = i6/1.5
         else:
-            self.catalogue['albedo'][cat1] = v1
-            self.catalogue['albedo'][cat2] = v2
-            self.catalogue['albedo'][cat3] = v3
-            self.catalogue['albedo'][cat4] = v4
-            self.catalogue['albedo'][cat5] = v5
-            self.catalogue['albedo'][cat6] = v6
+            self.catalogue['albedo'][cat1] = v1/1.5
+            self.catalogue['albedo'][cat2] = v2/1.5
+            self.catalogue['albedo'][cat3] = v3/1.5
+            self.catalogue['albedo'][cat4] = v4/1.5
+            self.catalogue['albedo'][cat5] = v5/1.5
+            self.catalogue['albedo'][cat6] = v6/1.5
             
         self.catalogue['albedo'][np.logical_not(jup)] = 0.3
         
@@ -282,7 +283,7 @@ class Systems(object):
         
         return self.integrate_spec( self.Fstar_spec(filterObj, usePhoenix=usePhoenix, tBrights=tBrights), filterObj )
     
-    def Fp(self, filterObj, tBrights=None):
+    def Fp(self, filterObj, usePhoenix=True, tBrights=None):
         """Calculate the planetary photon flux from each system.
         
         Args:
@@ -294,7 +295,7 @@ class Systems(object):
         
         """
         
-        return self.integrate_spec( self.Fp_spec(filterObj, tBrights=None), filterObj )
+        return self.integrate_spec( self.Fp_spec(filterObj, usePhoenix=usePhoenix, tBrights=tBrights), filterObj )
     
     def Fstar_spec(self, filterObj, usePhoenix=True, tBrights=None):
         """Calculate the stellar spectral flux from each system.
@@ -336,7 +337,7 @@ class Systems(object):
             B_wav_unique = []
             for fname in files_unique:
                 with fits.open(fname) as file:
-                    B_wav_unique.append(file[0].data[inds])
+                    B_wav_unique.append(file[0].data[inds]*1e-1) # 'erg/s/cm^2/cm' to kg/s^3
             
             B_wav = np.array([B_wav_unique[i] for i in inverse_inds])
             
@@ -355,7 +356,7 @@ class Systems(object):
         
         return tputs * B_wav * (self.catalogue['rstar']**2).reshape(-1,1)
 
-    def Fp_spec(self, filterObj, tBrights=None):
+    def Fp_spec(self, filterObj, usePhoenix=True, tBrights=None):
         """Calculate the reflected photon flux from each system.
         
         Args:
@@ -367,12 +368,12 @@ class Systems(object):
         
         """
         
-        fstar = self.Fstar_spec(filterObj, tBrights)
+        fstar = self.Fstar_spec(filterObj, usePhoenix=usePhoenix, tBrights=tBrights)
         albedo = self.catalogue['albedo'].reshape(-1,1)
         rp = self.catalogue['rp'].reshape(-1,1)
         a = self.catalogue['a'].reshape(-1,1)
         
-        # factor of 4 missing from fstar and semi-major axis squared, so they cancel out
+        # factor of 4 missing from fstar and 1/4 from semi-major axis squared, so they cancel out
         return albedo * fstar * (rp/a)**2
 
     def Fobs(self, fluxes):

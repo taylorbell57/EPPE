@@ -126,6 +126,10 @@ def polarization_apparentAngles(times, stokes, polEff, dist, Porb, a, inc=90, e=
 
 def plot_lightcurve(stokesCurve, filt, fstar=None, stokesCurve_ideal=None, highPassSize=None, lines=False):
     
+    stokesCurve = np.copy(stokesCurve)
+    if stokesCurve_ideal is not None:
+        stokesCurve_ideal = np.copy(stokesCurve_ideal)
+    
     if fstar is None:
         fstar = stokesCurve[0]
     
@@ -159,23 +163,41 @@ def plot_lightcurve(stokesCurve, filt, fstar=None, stokesCurve_ideal=None, highP
     ax.set_ylabel(r'$\rm F_p/F_*~(ppm);~'+filt+'\mbox{-}Band$')
     ax.set_xlabel(r'$\rm Orbital~Phase$')
     ax.set_xlim(0,1)
-    plt.show()
-    plt.close(fig)
     
-def plot_QU(stokesCurve, filt, stokesCurve_ideal=None, highPassSize=None, lines=False):
+    return fig
+#     plt.show()
+#     plt.close(fig)
+
+def plot_QU(stokesCurve, filt, stokesCurve_ideal=None, highPassSize=None, lines=False, normed=False):
+    
+    stokesCurve = np.copy(stokesCurve)
+    if stokesCurve_ideal is not None:
+        stokesCurve_ideal = np.copy(stokesCurve_ideal)
     
     fig, ax = plt.subplots(1, 1, figsize=(12,4))
 
     x = stokesCurve[-1]
     Q = stokesCurve[1]
     U = stokesCurve[2]
+    if normed:
+        Q /= stokesCurve[0]
+        U /= stokesCurve[0]
     order = np.argsort(x)
     Q = Q[order]
     U = U[order]
     x = x[order]
     
-    ax.plot(x, Q, '.', c='teal', label=r'$\rm Q_'+filt+'$')
-    ax.plot(x, U, '.', c='darkorange', label=r'$\rm U_'+filt+'$')
+    if normed:
+        Qlabel = 'q'
+        Ulabel = 'u'
+        norm = 1e6
+    else:
+        Qlabel = 'Q'
+        Ulabel = 'U'
+        norm = 1.
+    
+    ax.plot(x, Q*norm, '.', c='teal', label=r'$\rm '+Qlabel+'_'+filt+'$')
+    ax.plot(x, U*norm, '.', c='darkorange', label=r'$\rm '+Ulabel+'_'+filt+'$')
     
     if lines and highPassSize is not None:
         Q_sig = np.append(np.append(Q,Q),Q)
@@ -183,30 +205,105 @@ def plot_QU(stokesCurve, filt, stokesCurve_ideal=None, highPassSize=None, lines=
         smoothed_Q = convolve(Q_sig, Box1DKernel(highPassSize))[len(Q):2*len(Q)]
         smoothed_U = convolve(U_sig, Box1DKernel(highPassSize))[len(U):2*len(U)]
         
-        ax.plot(x, smoothed_Q, '-', lw=3, c='teal', label=r'$\rm Q_'+filt+'~Smoothed$')
-        ax.plot(x, smoothed_U, '-', lw=3, c='darkorange', label=r'$\rm U_'+filt+'~Smoothed$')
+        ax.plot(x, smoothed_Q*norm, '-', lw=3, c='teal', label=r'$\rm '+Qlabel+'_'+filt+'~Smoothed$')
+        ax.plot(x, smoothed_U*norm, '-', lw=3, c='darkorange', label=r'$\rm '+Ulabel+'_'+filt+'~Smoothed$')
 
     if lines and (stokesCurve_ideal is not None):
         x_ideal = stokesCurve_ideal[-1]
         Q_ideal = stokesCurve_ideal[1]
         U_ideal = stokesCurve_ideal[2]
+        if normed:
+            Q_ideal /= stokesCurve_ideal[0]
+            U_ideal /= stokesCurve_ideal[0]
         order_ideal = np.argsort(x_ideal)
         Q_ideal = Q_ideal[order_ideal]
         U_ideal = U_ideal[order_ideal]
         x_ideal = x_ideal[order_ideal]
 
-        ax.plot(x_ideal, Q_ideal, '--', lw=3, c='teal', label=r'$\rm Q_'+filt+'~ideal$')
-        ax.plot(x_ideal, U_ideal, '--', lw=3, c='darkorange', label=r'$\rm U_'+filt+'~ideal$')
+        ax.plot(x_ideal, Q_ideal*norm, '--', lw=3, c='teal', label=r'$\rm '+Qlabel+'_'+filt+'~ideal$')
+        ax.plot(x_ideal, U_ideal*norm, '--', lw=3, c='darkorange', label=r'$\rm '+Ulabel+'_'+filt+'~ideal$')
     
     ax.plot([0,1], [0,0], lw=1, c='k')
-    ax.set_ylabel(r'$\rm Polarized~Flux~(photons)$')
+    
+    if normed:
+        ylabel = r'$\rm Normalized~Polarized~Flux~(ppm)$'
+    else:
+        ylabel = r'$\rm Polarized~Flux~(photons)$'
+    
+    ax.set_ylabel(ylabel)
     ax.set_xlabel(r'$\rm Orbital~Phase$')
     ax.set_xlim(0,1)
     ax.legend(loc=6, bbox_to_anchor=(1,0.5))
-    plt.show()
-    plt.close(fig)
     
+    return fig
+#     plt.show()
+#     plt.close(fig)
+
+
+def plot_Q(stokesCurve, filt, stokesCurve_ideal=None, highPassSize=None, lines=False, normed=False):
+    
+    stokesCurve = np.copy(stokesCurve)
+    if stokesCurve_ideal is not None:
+        stokesCurve_ideal = np.copy(stokesCurve_ideal)
+    
+    fig, ax = plt.subplots(1, 1, figsize=(12,4))
+
+    x = stokesCurve[-1]
+    Q = stokesCurve[1]
+    if normed:
+        Q /= stokesCurve[0]
+    order = np.argsort(x)
+    Q = Q[order]
+    x = x[order]
+    
+    if normed:
+        Qlabel = 'q'
+        norm = 1e6
+    else:
+        Qlabel = 'Q'
+        norm = 1.
+    
+    ax.plot(x, Q*norm, '.', c='teal', label=r'$\rm '+Qlabel+'_'+filt+'$')
+    
+    if lines and highPassSize is not None:
+        Q_sig = np.append(np.append(Q,Q),Q)
+        smoothed_Q = convolve(Q_sig, Box1DKernel(highPassSize))[len(Q):2*len(Q)]
+        
+        ax.plot(x, smoothed_Q*norm, '-', lw=3, c='teal', label=r'$\rm '+Qlabel+'_'+filt+'~Smoothed$')
+
+    if lines and (stokesCurve_ideal is not None):
+        x_ideal = stokesCurve_ideal[-1]
+        Q_ideal = stokesCurve_ideal[1]
+        if normed:
+            Q_ideal /= stokesCurve_ideal[0]
+        order_ideal = np.argsort(x_ideal)
+        Q_ideal = Q_ideal[order_ideal]
+        x_ideal = x_ideal[order_ideal]
+
+        ax.plot(x_ideal, Q_ideal*norm, '--', lw=3, c='teal', label=r'$\rm '+Qlabel+'_'+filt+'~ideal$')
+    
+    ax.plot([0,1], [0,0], lw=1, c='k')
+    
+    if normed:
+        ylabel = r'$\rm Normalized~Polarized~Flux~(ppm)$'
+    else:
+        ylabel = r'$\rm Polarized~Flux~(photons)$'
+    
+    ax.set_ylabel(ylabel)
+    ax.set_xlabel(r'$\rm Orbital~Phase$')
+    ax.set_xlim(0,1)
+    ax.legend(loc=6, bbox_to_anchor=(1,0.5))
+    
+    return fig
+#     plt.show()
+#     plt.close(fig)
+
+
 def plot_P(stokesCurve, filt, stokesCurve_ideal=None, highPassSize=None, lines=False):
+    
+    stokesCurve = np.copy(stokesCurve)
+    if stokesCurve_ideal is not None:
+        stokesCurve_ideal = np.copy(stokesCurve_ideal)
     
     fig, ax = plt.subplots(1, 1, figsize=(12,4))
 
@@ -214,7 +311,7 @@ def plot_P(stokesCurve, filt, stokesCurve_ideal=None, highPassSize=None, lines=F
     F = stokesCurve[0]
     Q = stokesCurve[1]
     U = stokesCurve[2]
-    P = np.sqrt(Q**2+U**2)/stokesCurve[0]
+    P = np.sqrt(Q**2+U**2)/F
     order = np.argsort(x)
     F = F[order]
     Q = Q[order]
@@ -253,5 +350,7 @@ def plot_P(stokesCurve, filt, stokesCurve_ideal=None, highPassSize=None, lines=F
     ax.set_xlim(0,1)
     ax.set_ylim(0)
     ax.legend(loc=6, bbox_to_anchor=(1,0.5))
-    plt.show()
-    plt.close(fig)
+        
+    return fig
+#     plt.show()
+#     plt.close(fig)

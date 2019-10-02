@@ -7,9 +7,9 @@ from .Polarimetry import *
 from .KeplerOrbit import KeplerOrbit
 
 
-class EPPE(object):
+class mission(object):
     def __init__(self, systems, rad=0.15, trans=0.7, filt='V', filterObj=None, usePhoenix=True,
-                 fNoiseFloor=None, pNoiseFloor=None):
+                 fNoiseFloor=0, pNoiseFloor=0, fNoiseMultiplier=1, pNoiseMultiplier=1):
         
         self.systems = systems
         self.usePhoenix = usePhoenix
@@ -19,6 +19,8 @@ class EPPE(object):
         self.filterObj = filterObj
         self.fNoiseFloor = fNoiseFloor
         self.pNoiseFloor = pNoiseFloor
+        self.fNoiseMultiplier = fNoiseMultiplier
+        self.pNoiseMultiplier = pNoiseMultiplier
         
         if (filt=='V' or filt is None) and self.filterObj is None:
             wavCent = 551e-9 #m
@@ -37,17 +39,23 @@ class EPPE(object):
             wavWidth = 149e-9 # m
         
         if self.filterObj is None:
-            if self.usePhoenix:
-                wavs = np.logspace(np.log10(3000), np.log10(25000), 212027, endpoint=True)/1e10
-                wavs = wavs[np.logical_and(wavCent-wavWidth/2. < wavs, wavs < wavCent+wavWidth/2.)]
-                nwav = len(wavs)
-                dwav = (np.roll(wavs, -1)-np.roll(wavs, 1))/2.
-                dwav[0] = dwav[1]
-                dwav[-1] = dwav[-2]
-            else:
-                nwav = 100
-                dwav = wavWidth/nwav*np.ones(nwav)
-                wavs = np.linspace(wavCent-wavWidth/2., wavCent+wavWidth/2., nwav)
+            wavs = np.logspace(np.log10(3000), np.log10(25000), 212027, endpoint=True)/1e10
+            wavs = wavs[np.logical_and(wavCent-wavWidth/2. < wavs, wavs < wavCent+wavWidth/2.)]
+            nwav = len(wavs)
+            dwav = (np.roll(wavs, -1)-wavs)/2.
+            dwav[0] = dwav[1]
+            dwav[-1] = dwav[-2]
+#             if self.usePhoenix:
+#                 wavs = np.logspace(np.log10(3000), np.log10(25000), 212027, endpoint=True)/1e10
+#                 wavs = wavs[np.logical_and(wavCent-wavWidth/2. < wavs, wavs < wavCent+wavWidth/2.)]
+#                 nwav = len(wavs)
+#                 dwav = (np.roll(wavs, -1)-wavs)/2.
+#                 dwav[0] = dwav[1]
+#                 dwav[-1] = dwav[-2]
+#             else:
+#                 nwav = 100
+#                 dwav = wavWidth/nwav*np.ones(nwav)/2.
+#                 wavs = np.linspace(wavCent-wavWidth/2., wavCent+wavWidth/2., nwav)
             
             tput = np.ones_like(wavs)
             
@@ -59,17 +67,20 @@ class EPPE(object):
         
         return
     
-    def expose_photometric(self, expTime=1.):
+    def expose_photometric(self, expTime=1., rnd=False):
         
         teleFactor = self.trans*(expTime*3600)*(np.pi*self.rad**2)
         
         fstars = teleFactor*self.systems.Fobs(self.systems.Fstar(self.filterObj, usePhoenix=self.usePhoenix))
-        fplanets = teleFactor*self.systems.Fobs(self.systems.Fp(self.filterObj))
-        fPhotNoise = np.sqrt(fstars+fplanets)
+        fplanets = teleFactor*self.systems.Fobs(self.systems.Fp(self.filterObj, usePhoenix=self.usePhoenix))
+        fPhotNoise = np.sqrt(fstars+fplanets)*self.fNoiseMultiplier + (fstars+fplanets)*self.fNoiseFloor
         
-        return np.rint(fplanets), np.rint(fstars), np.rint(fPhotNoise)
+        if rnd:
+            return np.rint(fplanets), np.rint(fstars), np.rint(fPhotNoise)
+        else:
+            return fplanets, fstars, fPhotNoise
     
-    def observe_photometric(self, expTime=1., intTime=None, photonNoise=True, pStart=None):
+    def observe_photometric(self, expTime=1., intTime=None, photonNoise=True, pStart=None, rnd=False):
         
         fplanets, fstars, _ = self.expose_photometric(expTime)
         
@@ -110,19 +121,32 @@ class EPPE(object):
             angs = xyz_to_scatAngle(r, dist)
             lambertCurve = lambert_scatter(angs+180, fplanets[i])
             
-            if photonNoise:
-                pNoise = np.sqrt(lambertCurve)*np.random.normal(loc=0, scale=1, size=nPoints) 
-                sNoise = np.random.normal(loc=0, scale=np.sqrt(fstars[i]), size=nPoints)
-            else:
-                pNoise = sNoise = np.ones(nPoints)
+            fp = lambertCurve
+            fs = fstars[i]
             
-            fplanetsObs.append(lambertCurve+pNoise)
-            fstarsObs.append(fstars[i]+sNoise)
+            if photonNoise:
+                planetNoise = np.random.normal(loc=0,
+                                               scale=(np.sqrt(lambertCurve)*self.fNoiseMultiplier
+                                                      +lambertCurve*self.fNoiseFloor),
+                                               size=nPoints)
+                starNoise = np.random.normal(loc=0, scale=(np.sqrt(fstars[i])*self.fNoiseMultiplier
+                                                           +fstars[i]*self.fNoiseFloor), 
+                                             size=nPoints)
+                
+                fp += planetNoise
+                fs += starNoise
+            
+            if rnd:
+                fp = np.rint(fp)
+                fs = np.rint(fs)
+            
+            fplanetsObs.append(fp)
+            fstarsObs.append(fs)
             
         return fplanetsObs, fstarsObs, timesList, phasesList
 
     def observe_polarization(self, expTime=1., intTime=None, pStart=None,
-                             photonNoise=True, stellarVariability=False, stellarAmp=0.001, stellarPeriod=4*np.pi):
+                             photonNoise=True, stellarVariability=False, stellarAmp=0.001, stellarPeriod=4*np.pi, rnd=False):
         
         fplanetObs, fstarObs, _ = self.expose_photometric(expTime)
         
@@ -148,17 +172,19 @@ class EPPE(object):
             nPoints = int(np.rint(intTimeTemp/expTime))
             
             if pStart is None:
-                pStartTemp = np.random.uniform(0,1,1)
+                pStartTemp = np.random.uniform(0.,1.,1)
             else:
                 pStartTemp = pStart
             
-            times = t0+pStartTemp*Porb+np.linspace(0, intTimeTemp/24., nPoints)
+            times = t0+pStartTemp*Porb+np.linspace(0., intTimeTemp/24., nPoints)
             phases = t_to_phase(times, Porb, t0)
             
             if photonNoise:
-                nPhotons = fplanetObs[i] + np.random.normal(loc=0, scale=np.sqrt(fplanetObs[i]), size=nPoints)
-                nPhotons_stokes = np.random.normal(loc=0, scale=np.sqrt(fplanetObs[i]/3.)/2., 
-                                                   size=3*nPoints).reshape(3,nPoints)
+                fNoise = np.sqrt(fplanetObs[i])*self.fNoiseMultiplier + fplanetObs[i]*self.fNoiseFloor
+                nPhotons = fplanetObs[i] + np.random.normal(loc=0., scale=fNoise, size=nPoints)
+                pNoise = np.sqrt(fplanetObs[i]/3.)/2.*self.fNoiseMultiplier+fplanetObs[i]/3./4.*self.fNoiseFloor
+                pNoise = pNoise*self.pNoiseMultiplier+fplanetObs[i]/3./4.*self.pNoiseFloor
+                nPhotons_stokes = np.random.normal(loc=0, scale=pNoise, size=3*nPoints).reshape(3,nPoints)
                 stokes = np.append(nPhotons[np.newaxis,:], nPhotons_stokes, axis=0)
 
                 if stellarVariability:
@@ -166,9 +192,12 @@ class EPPE(object):
                     nPhotonsStar = fstarObs[i]*stFluct
                 else:
                     nPhotonsStar = fstarObs[i]
-                nPhotonsStar += np.random.normal(loc=0, scale=np.sqrt(fstarObs[i]), size=nPoints)
-                nPhotonsStar_stokes = np.random.normal(loc=0, scale=np.sqrt(fstarObs[i]/3.)/2.,
-                                                       size=3*nPoints).reshape(3,nPoints)
+                
+                fNoise = (np.sqrt(fstarObs[i])*self.fNoiseMultiplier + fstarObs[i]*self.fNoiseFloor)
+                nPhotonsStar += np.random.normal(loc=0, scale=fNoise, size=nPoints)
+                pNoise = np.sqrt(fstarObs[i]/3.)/2.*self.fNoiseMultiplier+fstarObs[i]/3./4.*self.fNoiseFloor
+                pNoise = pNoise*self.pNoiseMultiplier+fstarObs[i]/3./4.*self.pNoiseFloor
+                nPhotonsStar_stokes = np.random.normal(loc=0, scale=pNoise, size=3*nPoints).reshape(3,nPoints)
                 stokesStar = np.append(nPhotonsStar[np.newaxis, :], nPhotonsStar_stokes, axis=0)
             else:
                 stokes = np.array([fplanetObs[i], 0, 0, 0]).reshape(4,1)
@@ -181,7 +210,8 @@ class EPPE(object):
             stokesCurve = polarization_apparentAngles(times, stokes, polEff, dist, Porb, a,
                                                       inc, e, argp, orbAxisAng, t0)
             stokesCurve += stokesStar
-            stokesCurve = np.rint(stokesCurve)
+            if rnd:
+                stokesCurve = np.rint(stokesCurve)
             
             stokesCurve = np.append(stokesCurve, times[np.newaxis,:], axis=0)
             stokesCurve = np.append(stokesCurve, phases[np.newaxis,:], axis=0)
@@ -198,8 +228,9 @@ class EPPE(object):
         
         return amps/(np.sqrt(2)*noise)
     
-    def compute_amps(self, expTime=1.):
-        stokesCurves_ideal = self.observe_polarization(expTime, None, photonNoise=False, pStart=0)
+    def compute_amps(self):
+        expTime = 0.1
+        stokesCurves_ideal = self.observe_polarization(expTime=expTime, intTime=None, pStart=0, photonNoise=False)
         
         amps = []
         
@@ -209,7 +240,7 @@ class EPPE(object):
             
         return np.array(amps)
     
-    def compute_noise(self, expTime=1., photonNoise=True):
+    def compute_noise(self, expTime=1.):
         
         fplanetObs, fstarObs, _ = self.expose_photometric(expTime)
         
@@ -219,19 +250,19 @@ class EPPE(object):
             
             nPoints = int(1e3)
             
-            if photonNoise:
-                nPhotons = fplanetObs[i] + np.random.normal(loc=0, scale=np.sqrt(fplanetObs[i]), size=nPoints)
-                nPhotons_stokes = np.random.normal(loc=0, scale=np.sqrt(fplanetObs[i]/3.)/2., 
-                                                   size=3*nPoints).reshape(3,nPoints)
-                stokes = np.append(nPhotons[np.newaxis,:], nPhotons_stokes, axis=0)
+            fNoise = np.sqrt(fplanetObs[i])*self.fNoiseMultiplier + fplanetObs[i]*self.fNoiseFloor
+            nPhotons = fplanetObs[i] + np.random.normal(loc=0., scale=fNoise, size=nPoints)
+            pNoise = np.sqrt(fplanetObs[i]/3.)/2.*self.fNoiseMultiplier+fplanetObs[i]/3./4.*self.fNoiseFloor
+            pNoise = pNoise*self.pNoiseMultiplier+fplanetObs[i]/3./4.*self.pNoiseFloor
+            nPhotons_stokes = np.random.normal(loc=0, scale=pNoise, size=3*nPoints).reshape(3,nPoints)
+            stokes = np.append(nPhotons[np.newaxis,:], nPhotons_stokes, axis=0)
 
-                nPhotonsStar = fstarObs[i] + np.random.normal(loc=0, scale=np.sqrt(fstarObs[i]), size=nPoints)
-                nPhotonsStar_stokes = np.random.normal(loc=0, scale=np.sqrt(fstarObs[i]/3.)/2.,
-                                                       size=3*nPoints).reshape(3,nPoints)
-                stokesStar = np.append(nPhotonsStar[np.newaxis, :], nPhotonsStar_stokes, axis=0)
-            else:
-                stokes = np.array([fplanetObs[i], 0, 0, 0]).reshape(4,1)
-                stokesStar = np.array([fstarObs[i], 0, 0, 0]).reshape(4,1)
+            fNoise = (np.sqrt(fstarObs[i])*self.fNoiseMultiplier + fstarObs[i]*self.fNoiseFloor)
+            nPhotonsStar = fstarObs[i] + np.random.normal(loc=0, scale=fNoise, size=nPoints)
+            pNoise = np.sqrt(fstarObs[i]/3.)/2.*self.fNoiseMultiplier+fstarObs[i]/3./4.*self.fNoiseFloor
+            pNoise = pNoise*self.pNoiseMultiplier+fstarObs[i]/3./4.*self.pNoiseFloor
+            nPhotonsStar_stokes = np.random.normal(loc=0, scale=pNoise, size=3*nPoints).reshape(3,nPoints)
+            stokesStar = np.append(nPhotonsStar[np.newaxis, :], nPhotonsStar_stokes, axis=0)
             
             stokes = np.rint(stokes + stokesStar)
             pol = np.sqrt(stokes[1]**2+stokes[2]**2)/stokes[0]
