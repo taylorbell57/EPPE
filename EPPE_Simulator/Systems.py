@@ -7,10 +7,14 @@ import numpy as np
 import astropy.constants as const
 import pandas as pd
 from astropy.io import fits
+import errno
+import os
 
 class Systems(object):
-    def __init__(self, load=True, fname='compositepars_crossMatched.csv', complete=True, comment='#', nPlanets=300,
-                 albedo=0.3, polEff=1.0, randomOrientation=False):
+    def __init__(self, load=True, fname='./imports/compositepars_crossMatched.csv', complete=True, comment='#', nPlanets=300,
+                 albedo=0.3, polEff=1.0, randomOrientation=False, phoenixFolder='./PHOENIX/MedResFITS/R10000FITS/'):
+        
+        self.phoenixFolder = phoenixFolder
         
         if albedo=='theo':
             albedo = 0.3
@@ -28,7 +32,7 @@ class Systems(object):
             
         return
     
-    def load_planet_catalogue(self, fname='compositepars_crossMatched.csv', complete=True, comment='#',
+    def load_planet_catalogue(self, fname='./imports/compositepars_crossMatched.csv', complete=True, comment='#',
                               albedo=0.3, polEff=0.5, randomOrientation=False):
         data = pd.read_csv(fname, comment=comment)
         good = np.where(np.logical_and(np.logical_and(np.logical_and(
@@ -295,6 +299,7 @@ class Systems(object):
         
         Args:
             filterObj (dictionary): The filter object containing the filter wavelengths and throughputs.
+            usePhoenix (bool, optional): Whether or not to use PHOENIX stellar models for fluxes.
             tBrights (ndarray): The brightness temperatures to use if not stellar effective temperature.
         
         Returns:
@@ -333,8 +338,28 @@ class Systems(object):
             teffStr[teff>7000] = teffStr[teff>7000] - (teffStr[teff>7000]%200) + np.rint((teffStr[teff>7000]%200)/200)*200
             teffStr[teff>12000] = 12000
             
-            folder = '/home/taylor/Documents/Research/PHOENIX/MedResFITS/R10000FITS/'
-            files = [folder+'lte'+str(int(teffStr[i])).zfill(5)
+            # Check if PHONEIX files exist, and offer to download them
+            if not os.path.isdir(self.phoenixFolder):
+                print('You do not already have the PHOENIX stellar models downloaded.')
+                response = input('Do you want to download all of the relevant PHOENIX files'+
+                          ' (will only need to be done once)? (y/n)')
+                if response=='y':
+                    os.makedirs(self.phoenixFolder)
+
+                    webfolder = 'ftp://phoenix.astro.physik.uni-goettingen.de/MedResFITS/R10000FITS/'
+                    with urllib.request.urlopen(webfolder) as urlpath:
+                        string = urlpath.read().decode('utf-8')
+                        pattern = re.compile('PHOENIX-ACES-AGSS-COND-2011_R10000FITS_Z.{4}\.zip')
+                        filelist = pattern.findall(string)
+
+                        for filename in filelist:
+                            _ = urllib.request.urlretrieve(webfolder+filename, self.phoenixFolder+'zips/'+filename)
+                            with ZipFile(self.phoenixFolder+'zips/'+filename, 'r') as zipObj:
+                                zipObj.extractall(self.phoenixFolder)
+                else:
+                    raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), self.phoenixFolder)
+            
+            files = [self.phoenixFolder+'lte'+str(int(teffStr[i])).zfill(5)
                      +("{0:+.02f}".format(logg[i]) if logg[i]!=0 else '-0.00')
                      +("{0:+.01f}".format(feh[i]) if feh[i]!=0 else '-0.0')
                      +'.PHOENIX-ACES-AGSS-COND-2011-HiRes.fits' for i in range(len(teff))]
@@ -368,6 +393,7 @@ class Systems(object):
         
         Args:
             filterObj (dictionary): The filter object containing the filter wavelengths and throughputs.
+            usePhoenix (bool, optional): Whether or not to use PHOENIX stellar models for fluxes.
             tBrights (ndarray): The stellar brightness temperatures to use if not stellar effective temperature.
         
         Returns:
