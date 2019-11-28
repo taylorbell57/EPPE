@@ -3,3 +3,7 @@ __pycache__
 .gitignore.swp
 saves/
 oldCSVs
+Inclination\ vs\ Omega\ Degeneracy.ipynb
+POMM_Simulator.ipynb
+Testing\ Phase\ Functions.ipynb
+Polarization\ Photon\ Noise\ Determination.ipynb
