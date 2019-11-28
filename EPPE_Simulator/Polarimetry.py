@@ -6,6 +6,7 @@ from .KeplerOrbit import KeplerOrbit
 import numpy as np
 from astropy.convolution import convolve, Box1DKernel
 import matplotlib.pyplot as plt
+from scipy.special import jv as Jv
 
 def lambert_scatter(theta, stokes):
     """Compute the Lambertian scattering flux phase function.
@@ -123,6 +124,9 @@ def polarization_apparentAngles(times, stokes, polEff, dist, Porb, a, inc=90, e=
     rayStokesCurve = rotate(orbAxisAng, rayStokesCurve)
     
     return rayStokesCurve
+
+def retardance_efficiency(wavs, wavCent):
+    return Jv(2,np.pi*wavCent/wavs)*np.sqrt(2)
 
 def plot_lightcurve(stokesCurve, filt, fstar=None, stokesCurve_ideal=None, highPassSize=None, lines=False):
     

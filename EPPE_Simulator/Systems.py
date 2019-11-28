@@ -256,6 +256,13 @@ class Systems(object):
             self.catalogue['albedo'][cat4] = i4/1.5
             self.catalogue['albedo'][cat5] = i5/1.5
             self.catalogue['albedo'][cat6] = i6/1.5
+        elif filt=='EPPE':
+            self.catalogue['albedo'][cat1] = np.mean([u1, b1, v1, r1, i1])/1.5
+            self.catalogue['albedo'][cat2] = np.mean([u2, b2, v2, r2, i2])/1.5
+            self.catalogue['albedo'][cat3] = np.mean([u3, b3, v3, r3, i3])/1.5
+            self.catalogue['albedo'][cat4] = np.mean([u4, b4, v4, r4, i4])/1.5
+            self.catalogue['albedo'][cat5] = np.mean([u5, b5, v5, r5, i5])/1.5
+            self.catalogue['albedo'][cat6] = np.mean([u6, b6, v6, r6, i6])/1.5
         else:
             self.catalogue['albedo'][cat1] = v1/1.5
             self.catalogue['albedo'][cat2] = v2/1.5

@@ -3,12 +3,13 @@
 
 import numpy as np
 import astropy.constants as const
+from scipy.interpolate import interp1d
 from .Polarimetry import *
 from .KeplerOrbit import KeplerOrbit
 
 
 class mission(object):
-    def __init__(self, systems, rad=0.15, trans=0.7, filt='V', filterObj=None, usePhoenix=True,
+    def __init__(self, systems, rad=0.15, trans=0.7, filt='V', filterObj=None, pemCent=None, usePhoenix=True,
                  fNoiseFloor=0, pNoiseFloor=0, fNoiseMultiplier=1, pNoiseMultiplier=1):
         
         self.systems = systems
@@ -21,6 +22,8 @@ class mission(object):
         self.pNoiseFloor = pNoiseFloor
         self.fNoiseMultiplier = fNoiseMultiplier
         self.pNoiseMultiplier = pNoiseMultiplier
+        self.pemCent = pemCent
+        qe = 1.
         
         if (filt=='V' or filt is None) and self.filterObj is None:
             wavCent = 551e-9 #m
@@ -37,6 +40,28 @@ class mission(object):
         elif filt=='I' and self.filterObj is None:
             wavCent = 806e-9 # m
             wavWidth = 149e-9 # m
+        elif filt=='VR' and self.filterObj is None:
+            wavCent = 617e-9 # m
+            wavWidth = 220e-9 # m
+        elif filt=='LP590' and self.filterObj is None:
+            wavCent = 765e-9 # m
+            wavWidth = 350e-9 # m
+        elif filt=='EPPE' and self.filterObj is None:
+            wavCent = 650e-9 # m
+            wavWidth = 500e-9 # m
+            with open('EPPE_Simulator/APD_QE.csv', 'r') as f:
+                qe_wav = []
+                qe = []
+                for line in f.readlines():
+                    line = line.split(',')
+                    qe_wav.append(float(line[0]))
+                    qe.append(float(line[1]))
+                qe_wav = np.array(qe_wav)
+                qe = np.array(qe)[np.argsort(qe_wav)]
+                qe_wav = np.sort(qe_wav)
+        else:
+            print('ERROR: Filter with name \''+str(filt)+'\' is not recognized.')
+            return None
         
         if self.filterObj is None:
             wavs = np.logspace(np.log10(3000), np.log10(25000), 212027, endpoint=True)/1e10
@@ -57,10 +82,28 @@ class mission(object):
 #                 dwav = wavWidth/nwav*np.ones(nwav)/2.
 #                 wavs = np.linspace(wavCent-wavWidth/2., wavCent+wavWidth/2., nwav)
             
-            tput = np.ones_like(wavs)
+            if self.pemCent is None:
+                totals = np.array([(np.sum(retardance_efficiency(wavs[::100], pemCent)*dwav[::100])
+                                    /np.sum(dwav[::100])) for pemCent in wavs[::100]])
+                self.pemCent = wavs[::100][np.argmax(totals)]
+    
+            tput = retardance_efficiency(wavs, self.pemCent)#np.ones_like(wavs)
             
             self.filterObj = {'wavs': wavs, 'tput': tput, 'dwav': dwav}
+        else:
+            wavs = self.filterObj['wavs']
             
+            if self.pemCent is None:
+                totals = np.array([(np.sum(retardance_efficiency(wavs[::100], pemCent)*dwav[::100])
+                                    /np.sum(dwav[::100])) for pemCent in wavs[::100]])
+                self.pemCent = wavs[::100][np.argmax(totals)]
+    
+            self.filterObj['tput'] *= retardance_efficiency(wavs, self.pemCent)
+        
+        if type(qe) != float:
+            qe_interp = interp1d(qe_wav, qe, fill_value='extrapolate')
+            self.filterObj['tput'] *= qe_interp(wavs*1e6)
+        
         if self.systems.updateFlag:
             self.systems.updateAlbedos(filt)
             self.systems.updateFlag = False
